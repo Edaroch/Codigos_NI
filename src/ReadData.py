@@ -1,0 +1,73 @@
+import sqlite3
+import datetime
+
+def get_db_connection(db_path):
+    """Conectar a la base de datos y devolver el cursor y la conexión."""
+    conn = sqlite3.connect(db_path)
+    return conn, conn.cursor()
+
+def execute_query(cursor, query):
+    """Ejecutar una consulta SQL y devolver los resultados."""
+    cursor.execute(query)
+    return cursor.fetchall()
+
+def close_db_connection(conn):
+    """Cerrar la conexión a la base de datos."""
+    conn.close()
+
+def get_formatted_time():
+    """Obtener la hora y fecha actual en formato string."""
+    return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+def save_report_to_file(data, filename):
+    """Guardar los datos en un archivo de texto."""
+    with open(filename, 'w') as file:
+        file.write(data)
+
+def calculate_frequency(records):
+    """Calcular la frecuencia de muestreo basada en dos registros temporales."""
+    if len(records) == 2:
+        time_difference = abs(records[0][0] - records[1][0])
+        if time_difference > 0:  # Evitar división por cero
+            return 1.0 / time_difference
+    return 0  # En caso de que no haya suficientes registros o no haya diferencia
+
+def main():
+    db_path = 'Accelerations/aceleraciones.db'
+    conn, cursor = get_db_connection(db_path)
+
+    # Consultas SQL
+    queries = {
+        'last_n_records': 'SELECT * FROM acceleration_data ORDER BY time DESC LIMIT 3',
+        'total_records': 'SELECT COUNT(*) FROM acceleration_data',
+        'sample_seconds': 'SELECT MAX(time) - MIN(time) FROM acceleration_data',
+        'last_2_records': 'SELECT time FROM acceleration_data ORDER BY time DESC LIMIT 2'
+    }
+
+    # Ejecución de consultas
+    last_n_records = execute_query(cursor, queries['last_n_records'])
+    total_records = execute_query(cursor, queries['total_records'])[0][0]
+    sample_seconds = execute_query(cursor, queries['sample_seconds'])[0][0]
+    last_2_records = execute_query(cursor, queries['last_2_records'])
+
+    # Calcular frecuencia
+    frequency_hz = calculate_frequency(last_2_records)
+
+    # Preparación de datos para el archivo
+    report = []
+    report.append("Últimos 3 registros ordenados por timestamp:\n")
+    report.extend([str(record) + '\n' for record in last_n_records])
+    report.append(f"Total de registros en la base de datos: {total_records}\n")
+    report.append(f"Cantidad de segundos de muestra: {sample_seconds}\n")
+    report.append(f"Frecuencia de muestreo real: {frequency_hz:.2f} Hz\n")
+
+    close_db_connection(conn)
+
+    # Guardar en archivo
+    filename = f'reporte_{get_formatted_time()}.txt'
+    save_report_to_file(''.join(report), filename)
+    print(f"Reporte guardado en: {filename}")
+
+if __name__ == "__main__":
+    main()
+
