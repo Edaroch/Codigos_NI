@@ -1,29 +1,30 @@
 import sys
-# Asegurarte de que Python pueda encontrar los scripts en la subcarpeta src
 sys.path.append('src')
-
+from threading import Thread
 from DataAcquisitionContMultiProc import main as run_data_acquisition
 from ReadData import main as read_data
+from SQLtoTXT import main as data_packs
+from ChkPaths import check_and_create_paths
+from LoadSetupData import load_config
+
 
 def main():
+    config = load_config()
+    db_path, data_path = check_and_create_paths(config)
 
-    # Configuración de la captura
-    deviceName = 'cDAQ9185-21DA9E1'
-    total_capture_time = 0  # Configurado a 5 minutos para captura limitada por tiempo, 0 para continua
-    original_rate = 6400  # Frecuencia de muestreo original en Hz
-    decimation_factor = 16  # Factor de decimación para obtener 400 Hz
-    min_val = -0.006
-    max_val = 0.006
-    sensitivity = 10.0
-    buffer_size = 6400
-    number_of_sensors = 6
+    # Crear hilos para la adquisición de datos y la lectura de datos
+    acquisition_thread = Thread(target=run_data_acquisition, args=(config["deviceName"], int(config["total_capture_time"]), int(config["original_rate"]), int(config["decimation_factor"]), float(config["min_val"]), float(config["max_val"]), float(config["sensitivity"]), int(config["buffer_size"]), int(config["number_of_sensors"]), db_path))
+    data_packs_thread = Thread(target=data_packs, args=(int(config["cada"]), int(config["cuanto"]), db_path, data_path))
 
-    db_path = "Accelerations/aceleraciones.db"
+    # Iniciar los hilos
+    acquisition_thread.start()
+    data_packs_thread.start()
 
-    print("Iniciando la adquisición de datos. Presiona ENTER para cerrar")
-    run_data_acquisition(deviceName, total_capture_time, original_rate, decimation_factor, min_val, max_val, sensitivity, buffer_size, number_of_sensors, db_path)  # Llama a la función main del script de adquisición de datos.
-    read_data()  # Llama a la función main del script de lectura de datos.
+    # Esperar a que ambos hilos terminen
+    acquisition_thread.join()
+    data_packs_thread.join()
+
+    read_data(db_path)  # Ejecuta la función main del script de lectura de datos
 
 if __name__ == "__main__":
     main()
-    

@@ -1,0 +1,14 @@
+deviceName: cDAQ9185-21DA9E1                # Nombre del dispositivo de adquisición de datos
+total_capture_time: 0                       # Tiempo total de captura en minutos (0 para captura continua)
+original_rate: 6400                         # Frecuencia de muestreo original en Hz
+decimation_factor: 16                       # Factor de decimación para reducir la frecuencia de muestreo
+min_val: -0.006                             # Valor mínimo esperado en las mediciones (ver sensores)
+max_val: 0.006                              # Valor máximo esperado en las mediciones (ver sensores)
+sensitivity: 10.0                           # Sensibilidad del dispositivo (ver sensores)
+buffer_size: 6400                           # Tamaño del buffer para la captura de datos
+number_of_sensors: 6                        # Número de sensores conectados
+db_fold: C:/xampp/htdocs/APIRest/sqldb/     # Directorio de la base de datos
+db_file: aceleraciones                      # Nombre del archivo de la base de datos
+data_path: C:/xampp/htdocs/APIRest/data     # Ruta donde se almacenan los archivos de datos
+cada: 360                                   # Intervalo en minutos para realizar backups de la base de datos
+cuanto: 30                                  # Duración en minutos de los datos a respaldar

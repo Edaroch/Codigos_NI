@@ -32,8 +32,8 @@ def calculate_frequency(records):
             return 1.0 / time_difference
     return 0  # En caso de que no haya suficientes registros o no haya diferencia
 
-def main():
-    db_path = 'Accelerations/aceleraciones.db'
+def main(db_path):
+    
     conn, cursor = get_db_connection(db_path)
 
     # Consultas SQL
@@ -67,6 +67,8 @@ def main():
     filename = f'reporte_{get_formatted_time()}.txt'
     save_report_to_file(''.join(report), filename)
     print(f"Reporte guardado en: {filename}")
+
+# db_path = r"C:/xampp/htdocs/APIRest/sqldb/aceleraciones.db"
 
 if __name__ == "__main__":
     main()

@@ -28,6 +28,9 @@ def setup_database(db_path, number_of_sensors):  # Añade el número de sensores
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
+    # Activar WAL
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    
     # Generar dinámicamente las columnas de los sensores
     sensor_columns = ', '.join([f'sensor{i + 1} REAL' for i in range(number_of_sensors)])
     sql_query = f'''
@@ -36,23 +39,41 @@ def setup_database(db_path, number_of_sensors):  # Añade el número de sensores
             {sensor_columns}
         )
     '''
-    
-    
+    cursor.execute(sql_query)
     conn.commit()
     conn.close()
-    print("Configuración de la base de datos completa.")
+    # print("Configuración de la base de datos completa.")
 
-def buffer_to_sqlite(buffer, db_path, final=False):
-    if buffer:
-        conn = sqlite3.connect(db_path)
-        pd.DataFrame(buffer).to_sql('acceleration_data', conn, if_exists='append', index=False)
-        conn.close()
-        buffer.clear()
-        # print("Datos guardados en SQLite.")
+def buffer_to_sqlite(persistent_buffer, db_path, max_retries=5, initial_delay=0.5):
+    """Guardar buffer en SQLite con reintentos en caso de bloqueo de la base de datos, usando un buffer persistente."""
+    attempt = 0
+    delay = initial_delay
+
+    while attempt < max_retries:
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.execute("PRAGMA journal_mode=WAL;")  # Asegurarse de que WAL está activado en cada conexión
+            pd.DataFrame(persistent_buffer).to_sql('acceleration_data', conn, if_exists='append', index=False)
+            conn.close()
+            persistent_buffer.clear()  # Limpiar el buffer solo después de una escritura exitosa
+            break  # Salir del bucle si la inserción fue exitosa
+        except sqlite3.OperationalError as e:
+            if 'database is locked' in str(e):
+                print(f"Intento {attempt + 1} fallido, la base de datos está bloqueada. Reintentando en {delay} segundos...")
+                time.sleep(delay)
+                delay *= 2  # Aumentar el tiempo de espera para el próximo intento
+                attempt += 1
+            else:
+                raise  # Levantar otras excepciones de SQLite que no sean 'database is locked'
+        finally:
+            if conn:
+                conn.close()  # Asegurar que la conexión se cierre correctamente
+    else:
+        print("No se pudo guardar los datos después de varios intentos. Los datos permanecen en el buffer para un próximo intento.")
 
 def capture_data(data_queue, stop_event, deviceName, total_capture_time, original_rate, decimation_factor, min_val, max_val, sensitivity, buffer_size, number_of_sensors, db_path):
     setup_database(db_path, number_of_sensors)
-    print("Inicio de captura de datos. Presiona ENTER para cerrar la aplicación.")
+    # print("Inicio de captura de datos. Presiona ENTER para cerrar la aplicación.")
     start_time = time.time()
     with nidaqmx.Task() as task:
         for i in range(number_of_sensors):
@@ -70,7 +91,12 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
             data_queue.put(data)
 
 def process_data(data_queue, stop_event, deviceName, total_capture_time, original_rate, decimation_factor, min_val, max_val, sensitivity, buffer_size, number_of_sensors, db_path):
-    print("Inicio del procesamiento de datos. Presiona ENTER para cerrar la aplicación.")
+    persistent_buffer = []  # Buffer persistente que acumula datos hasta que se pueden guardar
+    print('''
+            ------------CAPTURANDO DATOS DEL DAQ------------
+             Presiona ENTER para detener la captura de datos.
+          '''
+          )
     while not stop_event.is_set() or not data_queue.empty():
         try:
             raw_data = data_queue.get(True, 2)  # Short timeout to check stop_event regularly
@@ -80,10 +106,16 @@ def process_data(data_queue, stop_event, deviceName, total_capture_time, origina
             df.reset_index(inplace=True)
             df.rename(columns={'index': 'time'}, inplace=True)
             df['time'] = df['time'].apply(lambda x: x.timestamp())
-            buffer_to_sqlite(df.to_dict(orient='records'), db_path)
+            # Añadir los datos nuevos al buffer persistente
+            persistent_buffer.extend(df.to_dict(orient='records'))
+            # Intentar guardar el buffer persistente en la base de datos
+            buffer_to_sqlite(persistent_buffer, db_path)
         except queue.Empty:
             continue
-    print("Procesamiento de datos completado. Presiona ENTER para finalizar")
+    if total_capture_time == 0:
+        print("Captura de datos completado.")
+    else:
+        print("Captura de datos completado. Presiona ENTER para terminar")
     stop_event.set()  # Ensure to signal stop to all processes
 
 
@@ -98,7 +130,7 @@ def main(deviceName, total_capture_time, original_rate, decimation_factor, min_v
     capture_process.start()
     processing_process.start()
 
-    input("Presiona ENTER para detener la captura de datos.\n")
+    input(" \n")
     stop_event.set()
 
     capture_process.join(timeout=1)

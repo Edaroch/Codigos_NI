@@ -1,50 +1,42 @@
-
 ## Project Description
 
-This project is the data acquisition of seismic sensors trough National Instruments (NI) DAQ. It provides endpoints for authentication, listing packages, and downloading packages. The sensor data is stored in text files and an SQLite database.
+This project handles the data acquisition from seismic sensors through a National Instruments (NI) DAQ system. The sensor data is captured and stored in a SQLite database, with functionality to export selected data spans to text files as per user requirements.
 
 ## Installation and Setup
 
 1. Clone the repository to your local machine.
-2. Modify the `php.ini` file in your XAMPP/PHP directory. Uncomment (remove the `;`) from `sqlite3` extension and save the changes.
-3. Restart Apache server.
-4. In XAMPP, stop MySQL and Apache, then start them again.
-5. Set up a local web server environment (e.g., Apache, Nginx, or XAMPP).
-6. Configure environment variables by creating a `.env` file in the project root directory if necessary.
-7. Run `composer install` to install PHP dependencies.
-8. Make sure the necessary PHP extensions are enabled (e.g., `pdo_sqlite`, `openssl`).
-9. Access the application through the web server.
-
-You can test the API with Postman using the following route: `ruta.../APIRest/sensordb.php?limit=100&page=1`.
+2. Install the NI-DAQmx software (version ni-daqmx_24.3), ensuring you choose the option for hardware recognition during setup.
+3. Set up your environment using Python 3.10.
+4. Install required Python packages from `requirements.txt`.
+5. Verify the configurations in `SETUP.txt`.
 
 ## Folder Structure
 
-- **src/**: Contains the PHP classes for the project.
-- **controllers/**: Contains the PHP files that handle HTTP requests and responses.
-- **data/**: Contains text files with sensor data.
-- **sqldb/**: Contains an SQLite database (`dataraw.db`) for storing sensor data.
-- **vendor/**: Contains the project dependencies.
-
-The `.htaccess` files in the `data/` and `sqldb/` directories restrict direct access to the data.
+- **src/**: Contains the Python modules for the project.
+- **data/**: Stores text files with sensor data.
+- **Accelerations/**: Houses the SQLite database (`aceleraciones.db`) used for persistent storage of sensor data.
 
 ## Files
 
-- **.gitattributes**: Git configuration file for handling line endings.
-- **index.php**: The main entry point for the API.
-- **composer.json**: Defines the project dependencies.
+- **.gitattributes**: Git configuration file that ensures consistent handling of line endings across various operating systems.
+- **main.py**: Main entry point for the data acquisition system.
+- **SETUP.txt**: Centralizes all configuration parameters for the application.
+- **GUIplot.py**: Provides a GUI for real-time visualization of accelerations, and facilitates data and figure export.
 
 ## Classes
 
-- **Authenticator.php**: Handles user authentication.
-- **DatabaseHelper.php**: Provides methods for interacting with the database.
-- **FileManager.php**: Provides methods for managing files.
+- **CheckResources.py**: Monitors and reports on computer resource utilization.
+- **DataAcquisitionContMultiProc.py**: Manages data capture from sensors through the DAQ system.
+- **SQLtoTXT.py**: Periodically exports data from the SQLite database to a .txt file based on user-defined intervals.
+- **ReadData.py**: Reads data from the database and logs the last three entries, total number of entries, and sampling frequency to a text file in the root directory.
+- **ChkPaths.py**: Ensures that the SQL database and data directories are present as defined in `SETUP.txt`; creates them if they are not.
+- **LoadSetupData.py**: Loads configuration settings from `SETUP.txt`.
 
 ## Usage
-1. Navigate to the application URL in your web browser.
-2. Log in with your credentials.
-3. Use the control panel to list available data packages and download them.
-4. Apply dynamic filters to refine your search.
+
+1. Execute `main.py`.
+2. To terminate the program, press ENTER multiple times as needed.
 
 ## Dependencies
-- **PHP**: Server-side scripting language for backend logic.
-- **Composer**: Dependency manager for PHP.
+
+- **NI-MAX**: Necessary for installing drivers for the NI hardware. Ensure that the DAQ is properly configured using this software before starting; verify that the device is detectable by the software and confirm that the device name is correctly entered into the `SETUP.txt` file.
