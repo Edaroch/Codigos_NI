@@ -31,6 +31,7 @@ This project handles the data acquisition from seismic sensors through a Nationa
 - **ReadData.py**: Reads data from the database and logs the last three entries, total number of entries, and sampling frequency to a text file in the root directory.
 - **ChkPaths.py**: Ensures that the SQL database and data directories are present as defined in `SETUP.txt`; creates them if they are not.
 - **LoadSetupData.py**: Loads configuration settings from `SETUP.txt`.
+- **SetupDatabase.py**: Setup the database with the table `acceleration_data` each row are designed `time` and `sensor1`, `sensor2`, etc... depending on the number of sensors in `SETUP.txt`
 
 ## Usage
 

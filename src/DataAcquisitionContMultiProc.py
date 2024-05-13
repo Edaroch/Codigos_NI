@@ -24,25 +24,7 @@ try:  # Crear directorio si no existe
 except FileNotFoundError:
     mkdir("Accelerations/")
 
-def setup_database(db_path, number_of_sensors):  # Añade el número de sensores como parámetro
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # Activar WAL
-    cursor.execute("PRAGMA journal_mode=WAL;")
-    
-    # Generar dinámicamente las columnas de los sensores
-    sensor_columns = ', '.join([f'sensor{i + 1} REAL' for i in range(number_of_sensors)])
-    sql_query = f'''
-        CREATE TABLE IF NOT EXISTS acceleration_data (
-            time REAL,
-            {sensor_columns}
-        )
-    '''
-    cursor.execute(sql_query)
-    conn.commit()
-    conn.close()
-    # print("Configuración de la base de datos completa.")
+
 
 def buffer_to_sqlite(persistent_buffer, db_path, max_retries=5, initial_delay=0.5):
     """Guardar buffer en SQLite con reintentos en caso de bloqueo de la base de datos, usando un buffer persistente."""
@@ -72,7 +54,7 @@ def buffer_to_sqlite(persistent_buffer, db_path, max_retries=5, initial_delay=0.
         print("No se pudo guardar los datos después de varios intentos. Los datos permanecen en el buffer para un próximo intento.")
 
 def capture_data(data_queue, stop_event, deviceName, total_capture_time, original_rate, decimation_factor, min_val, max_val, sensitivity, buffer_size, number_of_sensors, db_path):
-    setup_database(db_path, number_of_sensors)
+    
     # print("Inicio de captura de datos. Presiona ENTER para cerrar la aplicación.")
     start_time = time.time()
     with nidaqmx.Task() as task:
@@ -102,10 +84,13 @@ def process_data(data_queue, stop_event, deviceName, total_capture_time, origina
             raw_data = data_queue.get(True, 2)  # Short timeout to check stop_event regularly
             data = raw_data[:, ::decimation_factor]
             timestamps = pd.date_range(start=pd.Timestamp.now(), periods=len(data[0]), freq=pd.DateOffset(milliseconds=1000/(original_rate/decimation_factor)))
-            df = pd.DataFrame(data.transpose(), index=timestamps, columns=[f'sensor{i+1}' for i in range(6)])
+            df = pd.DataFrame(data.transpose(), index=timestamps, columns=[f'sensor{i+1}' for i in range(number_of_sensors)])
             df.reset_index(inplace=True)
             df.rename(columns={'index': 'time'}, inplace=True)
             df['time'] = df['time'].apply(lambda x: x.timestamp())
+            # Redondear solo las columnas de sensores a X decimales
+            sensor_columns = [col for col in df.columns if 'sensor' in col]
+            # df[sensor_columns] = df[sensor_columns].round(10)
             # Añadir los datos nuevos al buffer persistente
             persistent_buffer.extend(df.to_dict(orient='records'))
             # Intentar guardar el buffer persistente en la base de datos
