@@ -1,7 +1,7 @@
 deviceName: cDAQ9185-21DA9E1                # Nombre del dispositivo de adquisición de datos
 total_capture_time: 0                       # Tiempo total de captura en minutos (0 para captura continua)
 original_rate: 6400                         # Frecuencia de muestreo original en Hz
-decimation_factor: 16                       # Factor de decimación para reducir la frecuencia de muestreo
+decimation_factor: 32                       # Factor de decimación para reducir la frecuencia de muestreo 16 para 400Hz, 32 para 200Hz, 64 para 100Hz
 min_val: -0.006                             # Valor mínimo esperado en las mediciones (depende del sensor)
 max_val: 0.006                              # Valor máximo esperado en las mediciones (depende del sensor)
 sensitivity: 10.0                           # Sensibilidad del dispositivo (depende del sensor)
