@@ -1,4 +1,4 @@
-deviceName: cDAQ9185-21DA9E1                # Nombre del dispositivo de adquisición de datos
+deviceName: cDAQ1                        # Nombre del dispositivo de adquisición de datos cDAQ9185-21DA9E1 
 total_capture_time: 0                       # Tiempo total de captura en minutos (0 para captura continua)
 original_rate: 6400                         # Frecuencia de muestreo original en Hz
 decimation_factor: 16                       # Factor de decimación para reducir la frecuencia de muestreo
