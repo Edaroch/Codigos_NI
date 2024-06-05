@@ -41,3 +41,5 @@ This project handles the data acquisition from seismic sensors through a Nationa
 ## Dependencies
 
 - **NI-MAX**: Necessary for installing drivers for the NI hardware. Ensure that the DAQ is properly configured using this software before starting; verify that the device is detectable by the software and confirm that the device name is correctly entered into the `SETUP.txt` file.
+
+
