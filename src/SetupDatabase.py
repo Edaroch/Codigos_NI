@@ -71,7 +71,9 @@ def get_sensor_numbers(config):
             'ij'; i: module id; j:channel id
             'ij, kl, mn...': same as before, but multiple elements
     Output:
-        sensor_numbers: list
+        sensor_numbers: list with sensor numbers
+        sensor_numbers_all: list with all sensor numbers (all channels that will be
+            recorded by the daq, although some of them should be discarded)
     """
     daq_num_modules = config['daq_num_modules']
     daq_ch_per_module = config['daq_ch_per_module']
@@ -83,6 +85,7 @@ def get_sensor_numbers(config):
     for ai in [i for i in range(daq_ch_per_module)]:
         for mod in [j + 1 for j in range(daq_num_modules)]:
             sensor_numbers.append(10*mod+ai)
+    sensor_numbers_all = [i for i in sensor_numbers]
 
     # Readapt variable to see if there are unused channels
     exist_unused_ch = True
@@ -102,7 +105,7 @@ def get_sensor_numbers(config):
         for i in unused_ch:
             sensor_numbers.remove(i)
 
-    return sensor_numbers
+    return sensor_numbers, sensor_numbers_all
 
 
 def isNaN(float_number):

@@ -6,7 +6,6 @@ min_val: -0.006                             # Valor mínimo esperado en las medi
 max_val: 0.006                              # Valor máximo esperado en las mediciones (depende del sensor)
 sensitivity: 10.0                           # Sensibilidad del dispositivo (depende del sensor)
 buffer_size: 6400                           # Tamaño del buffer para la captura de datos
-number_of_sensors: 6                        # Número de sensores conectados
 db_fold: C:/xampp/htdocs/APIRest/sqldb/     # Directorio de la base de datos, si no existe se crea una donde este el script.
 db_file: accelerations_small                # Nombre del archivo de la base de datos.
 data_path: C:/xampp/htdocs/APIRest/data     # Ruta donde se almacenan los archivos de datos, si no existe se crea una donde este el script
