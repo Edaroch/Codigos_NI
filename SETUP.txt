@@ -13,4 +13,4 @@ cada: 360                                   # Intervalo en minutos para realizar
 cuanto: 30                                  # Duración en minutos de los datos a respaldar
 daq_num_modules: 2                          # Número de módulos conectados al DAQ
 daq_ch_per_module: 3                        # Número de canales que tiene cada módulo del DAQ (en general, 3)
-unused_ch: nan                              # 2 posibilidades: nan (todos usados) / números de dos cifras separados por comas (ej: 21, 22) siendo: ij: i-> núm. módulo (empieza en 1); j-> núm. channel (empieza en 0); ejemplo: 22: módulo 2 tiene el tercer canal sin sensor
+unused_ch: 20, 11, 21, 12, 22                              # 2 posibilidades: nan (todos usados) / números de dos cifras separados por comas (ej: 21, 22) siendo: ij: i-> núm. módulo (empieza en 1); j-> núm. channel (empieza en 0); ejemplo: 22: módulo 2 tiene el tercer canal sin sensor
