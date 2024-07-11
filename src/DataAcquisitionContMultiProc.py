@@ -130,7 +130,9 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
         try:
             raw_data = data_queue.get(True, 2)  # Short timeout to check stop_event regularly
             data = raw_data[:, ::decimation_factor]
-            timestamps = pd.date_range(start=pd.Timestamp.now(), periods=len(data[0]), freq=pd.DateOffset(milliseconds=1000/(original_rate/decimation_factor)))
+            timestamps = pd.date_range(start=pd.Timestamp.now(), periods=len(data[0]),
+                                       freq=pd.DateOffset(milliseconds=1000/(original_rate/decimation_factor)),
+                                       tz='Europe/Madrid')
             # df = pd.DataFrame(data.transpose(), index=timestamps, columns=[f'sensor{i+1}' for i in range(number_of_sensors)])
             df = pd.DataFrame(data.transpose(), index=timestamps, columns=[f'{i}' for i in sensor_numbers])
             df.reset_index(inplace=True)
