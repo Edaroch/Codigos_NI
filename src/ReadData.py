@@ -24,10 +24,21 @@ def save_report_to_file(data, filename):
     with open(filename, 'w') as file:
         file.write(data)
 
+# def calculate_frequency(records):
+#     """Calcular la frecuencia de muestreo basada en dos registros temporales."""
+#     if len(records) == 2:
+#         time_difference = abs(records[0][0] - records[1][0])
+#         if time_difference > 0:  # Evitar división por cero
+#             return 1.0 / time_difference
+#     return 0  # En caso de que no haya suficientes registros o no haya diferencia
+
 def calculate_frequency(records):
     """Calcular la frecuencia de muestreo basada en dos registros temporales."""
     if len(records) == 2:
-        time_difference = abs(records[0][0] - records[1][0])
+        time1 = datetime.datetime.fromtimestamp(records[0][0])
+        time2 = datetime.datetime.fromtimestamp(records[1][0])
+        
+        time_difference = abs((time1 - time2).total_seconds())
         if time_difference > 0:  # Evitar división por cero
             return 1.0 / time_difference
     return 0  # En caso de que no haya suficientes registros o no haya diferencia
@@ -37,11 +48,34 @@ def main(db_path):
     conn, cursor = get_db_connection(db_path)
 
     # Consultas SQL
+    # queries = {
+    #     'last_n_records': 'SELECT * FROM accelerations ORDER BY time DESC LIMIT 3',
+    #     'total_records': 'SELECT COUNT(*) FROM accelerations',
+    #     'sample_seconds': 'SELECT MAX(time) - MIN(time) FROM accelerations',
+    #     'last_2_records': 'SELECT time FROM accelerations ORDER BY time DESC LIMIT 2'
+    # }
+
     queries = {
-        'last_n_records': 'SELECT * FROM acceleration_data ORDER BY time DESC LIMIT 3',
-        'total_records': 'SELECT COUNT(*) FROM acceleration_data',
-        'sample_seconds': 'SELECT MAX(time) - MIN(time) FROM acceleration_data',
-        'last_2_records': 'SELECT time FROM acceleration_data ORDER BY time DESC LIMIT 2'
+        'last_n_records': '''
+            SELECT a.*
+            FROM accelerations a
+            JOIN timestamps t ON a.timestamp_id = t.id
+            ORDER BY t.timestamp DESC
+            LIMIT 3
+        ''',
+        'total_records': 'SELECT COUNT(*) FROM accelerations',
+        'sample_seconds': '''
+            SELECT (julianday(MAX(t.timestamp)) - julianday(MIN(t.timestamp))) * 86400.0 AS sample_seconds
+            FROM accelerations a
+            JOIN timestamps t ON a.timestamp_id = t.id
+        ''',
+        'last_2_records': '''
+            SELECT t.timestamp
+            FROM accelerations a
+            JOIN timestamps t ON a.timestamp_id = t.id
+            ORDER BY t.timestamp DESC
+            LIMIT 2
+        '''
     }
 
     # Ejecución de consultas
@@ -72,4 +106,3 @@ def main(db_path):
 
 if __name__ == "__main__":
     main()
-
