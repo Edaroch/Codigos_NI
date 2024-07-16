@@ -3,7 +3,7 @@ sys.path.append('src')
 import time
 from threading import Thread
 from DataAcquisitionContMultiProc import main as run_data_acquisition
-from ReadData import main as read_data
+# from ReadData import main as read_data
 # from SQLtoTXT import main as data_packs
 from ChkPaths import check_and_create_paths
 from LoadSetupData import load_config
@@ -34,7 +34,7 @@ def main():
     # data_packs_thread.join()
     # gui_thread.join()
 
-    read_data(db_path)  # Ejecuta la función main del script de lectura de datos
+    #read_data(db_path)  # Ejecuta la función main del script de lectura de datos
 
 if __name__ == "__main__":
     main()

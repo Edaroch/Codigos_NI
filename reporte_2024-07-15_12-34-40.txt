@@ -1,0 +1,7 @@
+Últimos 3 registros ordenados por timestamp:
+(58526400, 58526400, 1, -0.0641144988653967)
+(58526399, 58526399, 1, -0.019001939199744203)
+(58526398, 58526398, 1, -0.035352940417335804)
+Total de registros en la base de datos: 58526400
+Cantidad de segundos de muestra: None
+Frecuencia de muestreo real: 200.00 Hz
