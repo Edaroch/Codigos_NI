@@ -7,5 +7,9 @@ def load_config():
                 parts = line.split('#')
                 key_value_part = parts[0].strip()
                 key, value = key_value_part.split(': ')
-                config[key] = value
+                # Convertir el valor de debug en booleano
+                if key == 'debug':
+                    config[key] = value.lower() == 'true'
+                else:
+                    config[key] = value
     return config

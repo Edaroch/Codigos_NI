@@ -142,7 +142,7 @@ def setup_database(db_path, sensor_numbers):
         FOREIGN KEY (timestamp_id) REFERENCES timestamps(id),
         FOREIGN KEY (sensor_id) REFERENCES sensors(id)
     );
-    ''')        
+    ''')       
 
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON timestamps(timestamp);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_sensor_number ON sensors(sensor_number);")
@@ -150,10 +150,10 @@ def setup_database(db_path, sensor_numbers):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_sensor_id ON accelerations(sensor_id);")
     
     conn.commit()
-    
-    # Insert sensor names into the sensors table if they don't already exist
+
     for sensor_number in sensor_numbers:
         cursor.execute('INSERT OR IGNORE INTO sensors (sensor_number) VALUES (?)', (sensor_number,))
+
     
     conn.commit()
     conn.close()

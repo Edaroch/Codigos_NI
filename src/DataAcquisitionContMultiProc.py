@@ -1,10 +1,11 @@
 """ 
-Codigo para capturar datos de 6 sensores de aceleración utilizando un dispositivo NI cDAQ9185 con 2 módulos NI 9230 de 3 canales cada uno.
+Codigo para capturar datos de N sensores de aceleración utilizando un dispositivo NI cDAQ9185 con módulos NI 9230.
 
-El código captura datos de aceleración de 6 sensores en un intervalo de tiempo especificado y los guarda en un buffer de la capacidad del DAQ 
-esto es 6400 muestras en un segundo y lo vuelca en una base de datos con SQLlite y su respectivo timestamp UNIX. 
-El código también permite detener la captura de datos manualmente.
-Utiliza multiprocessing para captura y procesamiento de datos en paralelo.
+El código captura datos de aceleración de N sensores en un intervalo de tiempo especificado y los guarda en un buffer definido por el usuario de acuerdo a la capacidad del DAQ 
+y lo vuelca en una base de datos con SQLlite y su respectivo timestamp UNIX. 
+El código también permite detener la captura de datos manualmente presionando ENTER.
+Utiliza multiprocessing para captura y procesamiento de datos en paralelo. 
+El procesamiento de los datos no solo decima los datos sino que también los redondea a 5 decimales y agrega el timestamp UNIX.
 Python 3.10.9
 
 """
@@ -26,31 +27,28 @@ except FileNotFoundError:
 
 
 
-def buffer_to_sqlite(persistent_buffer, db_path, max_retries=5, initial_delay=0.5):
-    """Guardar buffer en SQLite con reintentos en caso de bloqueo de la base de datos, usando un buffer persistente."""
+def buffer_to_sqlite(persistent_buffer, db_path, config, max_retries=5, initial_delay=0.5):
     attempt = 0
     delay = initial_delay
 
     while attempt < max_retries:
         try:
             conn = sqlite3.connect(db_path)
-            conn.execute("PRAGMA journal_mode=WAL;")  # Asegurarse de que WAL está activado en cada conexión
+            conn.execute("PRAGMA journal_mode=WAL;")
             cursor = conn.cursor()
 
             df = pd.DataFrame(persistent_buffer)
 
-            # Save timestamp
+            if config["debug"]:
+                print(f"Datos pasando por la base de datos: {len(df)} registros.")
+
             timestamps = df['time'].unique()
             cursor.executemany("INSERT INTO timestamps (timestamp) VALUES (?)", [(ts,) for ts in timestamps])
             conn.commit()
 
-            # Fetch the IDs for the timestamps
             timestamp_ids = {ts: cursor.execute("SELECT id FROM timestamps WHERE timestamp = ?", (ts,)).fetchone()[0] for ts in timestamps}
-
-            # Fetch the sensor IDs from the sensors table
             sensor_ids = {number: cursor.execute("SELECT id FROM sensors WHERE sensor_number = ?", (number,)).fetchone()[0] for number in df.columns if number != 'time'}
 
-            # Prepare sensor data for insertion
             sensor_data = []
             for index, row in df.iterrows():
                 timestamp = row['time']
@@ -61,50 +59,45 @@ def buffer_to_sqlite(persistent_buffer, db_path, max_retries=5, initial_delay=0.
                         sensor_id = sensor_ids[sensor_number]
                         sensor_data.append((timestamp_id, sensor_id, row[col]))
 
-            # Insert sensor data
             cursor.executemany("INSERT INTO accelerations (timestamp_id, sensor_id, acceleration_value) VALUES (?, ?, ?)", sensor_data)
             conn.commit()
             conn.close()
-            persistent_buffer.clear()  # Limpiar el buffer solo después de una escritura exitosa
-            break  # Salir del bucle si la inserción fue exitosa
+            persistent_buffer.clear()
+
+            if config["debug"]:
+                print(f"Buffer a SQLite exitoso. {len(sensor_data)} datos insertados.")
+            break
         
         except sqlite3.OperationalError as e:
             if 'database is locked' in str(e):
                 print(f"Intento {attempt + 1} fallido, la base de datos está bloqueada. Reintentando en {delay} segundos...")
                 time.sleep(delay)
-                delay *= 2  # Aumentar el tiempo de espera para el próximo intento
+                delay *= 2
                 attempt += 1
             else:
-                raise  # Levantar otras excepciones de SQLite que no sean 'database is locked'
+                raise
         except Exception as e:
             print(f"An error occurred: {e}")
             attempt += 1
             if attempt < max_retries:
                 print(f"Retrying in {delay} seconds...")
                 time.sleep(delay)
-                delay *= 2  # Exponential backoff
+                delay *= 2
             else:
-                print("Max retries reached. Data not saved.")
+                print("Max retries reached. Data cannot be saved.")
                 break
         finally:
             if conn:
-                conn.close()  # Asegurar que la conexión se cierre correctamente
-    else:
-        print("No se pudo guardar los datos después de varios intentos. Los datos permanecen en el buffer para un próximo intento.")
+                conn.close()
 
 def capture_data(data_queue, stop_event, deviceName, total_capture_time, original_rate, min_val,
-                 max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers):
-    """
-    Function Duties:
-        All data is captured from the DAQ
-        Only channels that are set to be recorded are preserved
-    """
-    # print("Inicio de captura de datos. Presiona ENTER para cerrar la aplicación.")
+                 max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers, config):
     start_time = time.time()
     number_of_sensors = len(all_sensor_numbers)
     preserve_row = [i in sensor_numbers for i in all_sensor_numbers]
+
     with nidaqmx.Task() as task:
-        for i in range(number_of_sensors):  # firstly data is retrieved for all channels
+        for i in range(number_of_sensors):
             mod = 1 + i // 3
             ai = i % 3
             channel_str = f"{deviceName}Mod{mod}/ai{ai}"
@@ -113,54 +106,128 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
 
         while not stop_event.is_set():
             if total_capture_time > 0 and (time.time() - start_time >= total_capture_time):
-                # print("Tiempo de captura completado.")
                 stop_event.set()
             data = np.array(task.read(number_of_samples_per_channel=buffer_size)) * sensitivity
-            data = data[preserve_row, :]  # unused data (daq channels without sensor pluged in) is removed
+            data = data[preserve_row, :]
             data_queue.put(data)
 
-def process_data(data_queue, stop_event, total_capture_time, original_rate, decimation_factor, sensor_numbers, db_path):
-    persistent_buffer = []  # Buffer persistente que acumula datos hasta que se pueden guardar
-    print('''
-            ------------CAPTURANDO DATOS DEL DAQ------------
-             Presiona ENTER para detener la captura de datos.
-          '''
-          )
-    while not stop_event.is_set() or not data_queue.empty():
+            # if config["debug"]:
+            #     print(f"Datos capturados del DAQ: {data.shape} antes de decimación.")
+
+def process_data(data_queue, stop_event, total_capture_time, original_rate, decimation_factor, sensor_numbers, db_path, buffer_size, config):
+    persistent_buffer = []
+
+    # Condición para mostrar el mensaje en modo debug o no
+    if config["debug"]:
+        print('''
+        ------------CAPTURANDO DATOS DEL DAQ------------
+         Presiona ENTER para detener la captura de datos.
+                        DEBUG MODE ON
+        '''
+        )
+    else:
+        print('''
+        ------------CAPTURANDO DATOS DEL DAQ------------
+         Presiona ENTER para detener la captura de datos.
+        '''
+        )
+
+    packet_count = 0  # Contador de paquetes procesados
+    decimated_rate = original_rate // decimation_factor  # Frecuencia de muestreo después de la decimación
+    interval = 1 / decimated_rate  # Intervalo de tiempo entre cada muestra en segundos
+
+    # Usar tiempo real para el control de sincronización
+    last_time = pd.Timestamp.now().timestamp()
+    last_timestamp = None  # Guardar el último timestamp del paquete anterior
+
+    first_timestamp = None  # Guardar el primer timestamp del primer paquete
+    final_timestamp = None  # Guardar el último timestamp del último paquete
+
+    while not stop_event.is_set():
+        if total_capture_time > 0 and packet_count >= total_capture_time:
+            break  # Romper el ciclo si se ha alcanzado el tiempo límite
+
         try:
-            raw_data = data_queue.get(True, 2)  # Short timeout to check stop_event regularly
+            current_time = pd.Timestamp.now().timestamp()  # Tiempo actual
+            elapsed_time = current_time - last_time  # Tiempo transcurrido desde la última captura
+
+            # Si no ha pasado suficiente tiempo, esperar
+            if elapsed_time < 1:
+                time.sleep(1 - elapsed_time)
+                current_time = pd.Timestamp.now().timestamp()
+
+            last_time = current_time  # Actualizar el tiempo para el siguiente ciclo
+
+            # Capturar los datos del DAQ
+            raw_data = data_queue.get(True, 2)  # Esperar datos con un timeout de 2 segundos
+            packet_count += 1  # Contar los paquetes procesados
+
+            # Decimación de los datos
             data = raw_data[:, ::decimation_factor]
-            timestamps = pd.date_range(start=pd.Timestamp.now(), periods=len(data[0]),
-                                       freq=pd.DateOffset(milliseconds=1000/(original_rate/decimation_factor)),
-                                       tz='Europe/Madrid')
-            # df = pd.DataFrame(data.transpose(), index=timestamps, columns=[f'sensor{i+1}' for i in range(number_of_sensors)])
+
+            # Generar timestamps para el paquete basado en el tiempo real y el intervalo de muestreo
+            timestamps = [last_time + i * interval for i in range(len(data[0]))]
+
+            # Guardar el primer timestamp del primer paquete
+            if first_timestamp is None:
+                first_timestamp = timestamps[0]
+
+            # Guardar el último timestamp del paquete actual
+            final_timestamp = timestamps[-1]
+
             df = pd.DataFrame(data.transpose(), index=timestamps, columns=[f'{i}' for i in sensor_numbers])
             df.reset_index(inplace=True)
             df.rename(columns={'index': 'time'}, inplace=True)
-            df['time'] = df['time'].apply(lambda x: x.timestamp())
-            # Redondear solo las columnas de sensores a X decimales
-            sensor_columns = [col for col in df.columns if 'sensor' in col]
-            # df[sensor_columns] = df[sensor_columns].round(10)
-            # Añadir los datos nuevos al buffer persistente
+
+            # Conteo de Paquetes
+            if config["debug"]:
+                print(f"Paquete número {packet_count} procesado.")
+
+            # Agregar los datos nuevos al buffer persistente
             persistent_buffer.extend(df.to_dict(orient='records'))
-            # Intentar guardar el buffer persistente en la base de datos
-            buffer_to_sqlite(persistent_buffer, db_path)
+            buffer_to_sqlite(persistent_buffer, db_path, config)
+
+            # Comparar timestamps si el modo debug está activado
+            if config["debug"]:
+                if last_timestamp is not None:
+                    now_difference = pd.Timestamp.now().timestamp() - (last_timestamp + 1 / decimated_rate)
+                    print(f"Diferencia ajustada entre el último timestamp del paquete anterior y el tiempo actual: {now_difference} segundos.")
+                    print(f"--------------------------------------------")
+
+                print(f"Timestamps para el paquete {packet_count}: desde {timestamps[0]} hasta {timestamps[-1]}")
+
+            # Guardar el último timestamp del paquete actual para la próxima iteración
+            last_timestamp = timestamps[-1]
+
         except queue.Empty:
             continue
+
     if total_capture_time == 0:
-        print("Captura de datos completado.")
+        print("Captura continua. Presiona ENTER para terminar.")
     else:
-        print("Captura de datos completado. Presiona ENTER para terminar")
-    stop_event.set()  # Ensure to signal stop to all processes
+        print("Captura de datos completada.")
+
+    # Calcular el tiempo total de captura basado en los timestamps
+    if config["debug"] and first_timestamp is not None and final_timestamp is not None:
+        capture_time = final_timestamp - first_timestamp
+        print(f"Tiempo total real de captura de datos: {capture_time:.5f} segundos.")
+
+    stop_event.set()  # Asegurarse de que la captura se detenga
 
 
-
-def main(deviceName, total_capture_time, original_rate, decimation_factor, min_val, max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers, db_path):
+def main(deviceName, total_capture_time, original_rate, decimation_factor, min_val, max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers, db_path, config):
     data_queue = Queue()
     stop_event = Event()
 
-    capture_process = Process(target=capture_data, args=(data_queue, stop_event, deviceName, total_capture_time, original_rate, min_val, max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers))
-    processing_process = Process(target=process_data, args=(data_queue, stop_event, total_capture_time, original_rate, decimation_factor, sensor_numbers, db_path))
+    # Pasar buffer_size a process_data
+    capture_process = Process(target=capture_data, args=(
+        data_queue, stop_event, deviceName, total_capture_time, original_rate, 
+        min_val, max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers, config))
+    
+    # Aquí añadimos el buffer_size como argumento
+    processing_process = Process(target=process_data, args=(
+        data_queue, stop_event, total_capture_time, original_rate, decimation_factor, 
+        sensor_numbers, db_path, buffer_size, config))
 
     capture_process.start()
     processing_process.start()
@@ -172,12 +239,10 @@ def main(deviceName, total_capture_time, original_rate, decimation_factor, min_v
     processing_process.join(timeout=1)
 
     if capture_process.is_alive() or processing_process.is_alive():
-        # print("Forzando la terminación de procesos pendientes...")
         capture_process.terminate()
         processing_process.terminate()
 
     print("Todos los procesos han finalizado.")
-    pass
 
 if __name__ == "__main__":
     main()
