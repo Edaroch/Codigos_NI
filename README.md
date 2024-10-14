@@ -1,6 +1,6 @@
 ## Project Description
 
-This project handles the data acquisition from seismic sensors through a National Instruments (NI) DAQ system. The sensor data is captured and stored in a SQLite database, with functionality to export selected data spans to text files as per user requirements.
+This project handles the data acquisition from seismic sensors through a National Instruments (NI) DAQ system. The sensor data is captured and stored in a SQLite database, with functionality to export selected data spans to text files as per user requirements. Additionally, the system dynamically adjusts the decimation factor to match a user-defined target frequency, ensuring efficient data handling and storage.
 
 ## Installation and Setup
 
@@ -14,7 +14,7 @@ This project handles the data acquisition from seismic sensors through a Nationa
 
 - **src/**: Contains the Python modules for the project.
 - **data/**: Stores text files with sensor data.
-- **Accelerations/**: Houses the SQLite database (`aceleraciones.db`) used for persistent storage of sensor data.
+- **Accelerations/**: Houses the SQLite database (`acelerations.db`) used for persistent storage of sensor data.
 
 ## Files
 
@@ -26,12 +26,25 @@ This project handles the data acquisition from seismic sensors through a Nationa
 ## Classes
 
 - **CheckResources.py**: Monitors and reports on computer resource utilization.
-- **DataAcquisitionContMultiProc.py**: Manages data capture from sensors through the DAQ system.
-- **SQLtoTXT.py**: Periodically exports data from the SQLite database to a .txt file based on user-defined intervals.
-- **ReadData.py**: Reads data from the database and logs the last three entries, total number of entries, and sampling frequency to a text file in the root directory.
+- **DataAcquisitionContMultiProc.py**: Manages data capture from sensors through the DAQ system, with support for dynamic decimation based on the target frequency defined in `SETUP.txt`.
 - **ChkPaths.py**: Ensures that the SQL database and data directories are present as defined in `SETUP.txt`; creates them if they are not.
 - **LoadSetupData.py**: Loads configuration settings from `SETUP.txt`.
 - **SetupDatabase.py**: Setup the database with the table `acceleration_data` each row are designed `time` and `sensor1`, `sensor2`, etc... depending on the number of sensors in `SETUP.txt`
+
+## Configuration
+
+The `SETUP.txt` file contains critical configuration settings for the data acquisition system, including:
+- **deviceName**: The name of the NI DAQ device.
+- **total_capture_time**: Thetotal duration for data capture (in seconds)
+- **original_rate**: The initial sampling rate from the sensors.
+- **decimation_frec**: The target frequency after dynamic decimation (e.g., 20 Hz).
+- **buffer_size**: The size of the data buffer for acquisition.
+- **db_fold**: Path to store the SQLite database.
+- **buffer_flush_interval**: Interval (in seconds) to flush the data buffer to the SQLite database.
+
+## Dynamic Decimation
+
+The system dynamically adjusts the decimation factor to maintain the target frequency (decimation_frec) as defined in `SETUP.txt`. This ensures that the frequency of data stored in the database is consistent, even if the rate of data reception varies.
 
 ## Usage
 
@@ -41,5 +54,7 @@ This project handles the data acquisition from seismic sensors through a Nationa
 ## Dependencies
 
 - **NI-MAX**: Necessary for installing drivers for the NI hardware. Ensure that the DAQ is properly configured using this software before starting; verify that the device is detectable by the software and confirm that the device name is correctly entered into the `SETUP.txt` file.
+- **SQLite**: The project uses SQLite as the database for storing sensor data.
+- **Python Packages**: Install required Python packages using `pip install -r requirements.txt`.
 
 
