@@ -1,14 +1,18 @@
-deviceName: cDAQ1                           # Nombre del dispositivo de adquisición de datos cDAQ9185-21DA9E1 
-total_capture_time: 0                       # Tiempo total de captura en minutos (0 para captura continua)
-original_rate: 200                          # Frecuencia de muestreo original en Hz del DAQ. de 2Hz a 24000Hz
-buffer_size: 200                            # Tamaño del buffer del DAQ para la captura de datos
+deviceName: cDAQ1                           # Nombre del dispositivo de adquisición de datos cDAQ9185-21DA9E1.
+total_capture_time: 0                       # Tiempo total de captura en minutos (0 para captura continua).
+original_rate: 200                          # Frecuencia de muestreo original en Hz del DAQ. de 2Hz a 24000Hz.
+buffer_size: 600                            # Tamaño del buffer del DAQ para la captura de datos.
 decimation_factor: 1                        # Factor de decimación para reducir la frecuencia de muestreo. Este numero decima de acuerdo a la frecuencia de muestreo, por ejemplo si estamos muestreando a 200Hz y queremos guardar solo 20 datos decimados, usamos el valor de 10.
-min_val: -0.006                             # Valor mínimo esperado en las mediciones (depende del sensor)
-max_val: 0.006                              # Valor máximo esperado en las mediciones (depende del sensor)
-sensitivity: 10.0                           # Sensibilidad del dispositivo (depende del sensor)
-db_fold: C:/xampp/htdocs/APIRest/sqldb/     # Directorio de la base de datos, si no existe se crea una donde este el script.
-db_file: accelerations                      # Nombre del archivo de la base de datos.
+min_val: -0.006                             # Valor mínimo esperado en las mediciones (depende del sensor).
+max_val: 0.006                              # Valor máximo esperado en las mediciones (depende del sensor).
+sensitivity: 10.0                           # Sensibilidad del dispositivo (depende del sensor).
 daq_num_modules: 2                          # Número de módulos conectados al DAQ
 daq_ch_per_module: 3                        # Número de canales que tiene cada módulo del DAQ (en general, 3)
 unused_ch: nan                              # 2 posibilidades: nan (todos usados) / números de dos cifras separados por comas (ej: 21, 22) siendo: ij: i-> núm. módulo (empieza en 1); j-> núm. channel (empieza en 0); ejemplo: 22: módulo 2 tiene el tercer canal sin sensor
-debug: True                                 # Modo de depuración, True para activar debug logs
+debug: True                                 # Modo de depuración, True para activar debug logs, False para desactivarlos.
+db_host: localhost                          # CONFIG DE MONGODB.
+db_port: 27017                              # CONFIG DE MONGODB.
+db_name: acquisition_db                     # Nombre de la base de datos temporal en tiempo real.
+db_backup_name: acquisition_db_raw          # Nombre de la base de datos grande para almacenamiento histórico.
+backup_time: 600                            # Este es el tiempo en segundos de respaldo de la base de datos buffer a la base de datos raw que almacena todos los datos.
+restart_time: 1d                            # 0 Para adquisición continua, 10s para cada diez segundos, 1d para cada un dia y 1w para cada una semana.

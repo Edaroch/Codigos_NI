@@ -1,6 +1,6 @@
 ## Project Description
 
-This project handles the data acquisition from seismic sensors through a National Instruments (NI) DAQ system. The sensor data is captured and stored in a SQLite database, with functionality to export selected data spans to text files as per user requirements. Additionally, the system dynamically adjusts the decimation factor to match a user-defined target frequency, ensuring efficient data handling and storage.
+This project handles the data acquisition from seismic sensors through a National Instruments (NI) DAQ system. Sensor data is captured and stored in a MongoDB database for real-time monitoring, with a backup system that transfers buffered data to a raw database for long-term storage. The system dynamically adjusts the decimation factor to match a user-defined target frequency, ensuring efficient data handling and storage. Additionally, users can configure acquisition times, buffer sizes, and backup intervals through a configurable `SETUP.txt` file.
 
 ## Installation and Setup
 
@@ -13,43 +13,50 @@ This project handles the data acquisition from seismic sensors through a Nationa
 ## Folder Structure
 
 - **src/**: Contains the Python modules for the project.
-- **data/**: Stores text files with sensor data.
-- **Accelerations/**: Houses the SQLite database (`acelerations.db`) used for persistent storage of sensor data.
+- **MongoDB/**: Houses the MongoDB database used for persistent storage of sensor data.
 
 ## Files
 
 - **.gitattributes**: Git configuration file that ensures consistent handling of line endings across various operating systems.
-- **main.py**: Main entry point for the data acquisition system.
-- **SETUP.txt**: Centralizes all configuration parameters for the application.
-- **GUIplot.py**: Provides a GUI for real-time visualization of accelerations, and facilitates data and figure export.
+- **main.py**: Main entry point for the data acquisition system, responsible for initializing the data acquisition, processing, and backup workflows.
+- **SETUP.txt**: Central configuration file for the application, controlling DAQ settings, backup intervals, and database configurations.
+- **interface.py**: GUI for managing configuration settings and executing `main.py` directly from the interface.
 
 ## Classes
 
-- **CheckResources.py**: Monitors and reports on computer resource utilization.
-- **DataAcquisitionContMultiProc.py**: Manages data capture from sensors through the DAQ system, with support for dynamic decimation based on the target frequency defined in `SETUP.txt`.
-- **ChkPaths.py**: Ensures that the SQL database and data directories are present as defined in `SETUP.txt`; creates them if they are not.
+- **DataAcquisitionContMultiProc.py**: Manages data capture from sensors through the DAQ system, handles real-time decimation, and manages data storage into MongoDB.
+- **ChkPaths.py**: Ensures that the necessary directories and MongoDB databases are available as defined in `SETUP.txt`; creates them if they are not.
 - **LoadSetupData.py**: Loads configuration settings from `SETUP.txt`.
-- **SetupDatabase.py**: Setup the database with the table `acceleration_data` each row are designed `time` and `sensor1`, `sensor2`, etc... depending on the number of sensors in `SETUP.txt`
+- **SetupDatabase.py**: Initializes MongoDB collections for buffering real-time data.
 
 ## Configuration
 
 The `SETUP.txt` file contains critical configuration settings for the data acquisition system, including:
 - **deviceName**: The name of the NI DAQ device.
-- **total_capture_time**: Thetotal duration for data capture (in seconds)
-- **original_rate**: The initial sampling rate from the sensors.
-- **decimation_frec**: The target frequency after dynamic decimation (e.g., 20 Hz).
-- **buffer_size**: The size of the data buffer for acquisition.
-- **db_fold**: Path to store the SQLite database.
-- **buffer_flush_interval**: Interval (in seconds) to flush the data buffer to the SQLite database.
+- **total_capture_time**: The total duration for data capture (in seconds, or 0 for continuous capture).
+- **original_rate**: The initial sampling rate from the sensors (in Hz).
+- **decimation_factor**: Factor by which to reduce the sampling rate for long-term storage.
+- **buffer_size**: The size of the buffer for each acquisition session.
+- **db_host**: MongoDB host address.
+- **db_port**: MongoDB port.
+- **db_name**: The MongoDB database for real-time data storage.
+- **db_backup_name**: The MongoDB database for long-term storage (backup).
+- **backup_time**: Interval (in seconds) for backing up buffered data to the long-term storage database.
+- **restart_time**: Defines the interval for restarting the acquisition process (0 for continuous acquisition, 10s for every ten seconds, 1d for every day, etc.).
 
-## Dynamic Decimation
 
-The system dynamically adjusts the decimation factor to maintain the target frequency (decimation_frec) as defined in `SETUP.txt`. This ensures that the frequency of data stored in the database is consistent, even if the rate of data reception varies.
+## Decimation
+
+The system ensure that the data stored in the MongoDB database reflects the intended sampling rate, even if the rate of data reception varies. The buffered data is then periodically backed up to a raw database, with the ability to process data in configurable chunks to avoid overloading the database during large data captures.
+
+- **Backup Handling**: Data from the buffer is backed up in batches (default 50000 records per batch) and subsequently deleted from the buffer to free space.
+- **Error Handling**: The system retries failed database operations and provides debug information if enabled in `SETUP.txt`.
 
 ## Usage
 
 1. Execute `main.py`.
-2. To terminate the program, press ENTER multiple times as needed.
+2. You can also use `interface.py` for a graphical user interface to manage configuration and start/stop the acquisition process.
+3. To terminate the acquisition process, press ENTER when prompted in the console.
 
 ## Dependencies
 
@@ -57,4 +64,9 @@ The system dynamically adjusts the decimation factor to maintain the target freq
 - **SQLite**: The project uses SQLite as the database for storing sensor data.
 - **Python Packages**: Install required Python packages using `pip install -r requirements.txt`.
 
-
+## Features
+1. Real-time data acquisition from seismic sensors via NI DAQ.
+2. Decimation to reduce data load while maintaining relevant data for long-term storage.
+3. MongoDB integration for storing sensor data, with a backup system to transfer data from a temporary buffer to a long-term database.
+4. Configurable acquisition intervals, backup times, and buffer sizes via SETUP.txt.
+5. Interactive GUI (interface.py) for managing configuration settings and executing the acquisition process directly.
