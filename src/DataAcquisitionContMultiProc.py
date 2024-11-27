@@ -9,11 +9,12 @@ El procesamiento de los datos no solo decima los datos sino que también los red
 Python 3.10.9
 
 """
-import nidaqmx
+from nidaqmx import Task
 from nidaqmx.constants import AcquisitionType, AccelUnits, AccelSensitivityUnits
-import pandas as pd
-import numpy as np
+from pandas import DataFrame
+from numpy import array
 from pymongo import MongoClient, errors
+from sqlite3 import connect
 import time
 from os import stat, mkdir
 from multiprocessing import Process, Queue, Event
@@ -37,39 +38,60 @@ def close_mongodb_client():
         mongo_client.close()
         mongo_client = None  # Resetear para asegurarnos de que se puede reinicializar más adelante
 
-def buffer_to_mongodb(persistent_buffer, db_config, config, max_retries=5, initial_delay=0.5):
-    """Función para insertar los datos en MongoDB."""
+def buffer_to_db(persistent_buffer, db_path, config, max_retries=5, initial_delay=0.5):
+    """
+    Inserta datos en la base de datos SQLite3.
+    """
     attempt = 0
     delay = initial_delay
 
-    client = initialize_mongodb_client(db_config)
-    db = client[db_config['db_name']]
-    accelerations_collection = db['accelerations']
+    # Conexión a SQLite3
+    conn = connect(db_path)
+    cursor = conn.cursor()
+
+    # Activar WAL
+    cursor.execute("PRAGMA journal_mode=WAL;")
 
     while attempt < max_retries:
         try:
-            df = pd.DataFrame(persistent_buffer)
+            # Crear DataFrame para manejar los datos
+            df = DataFrame(persistent_buffer)
 
             if config["debug"]:
                 print(f"5) Datos pasando por la base de datos: {len(df)} registros.")
 
-            # Insertar los datos agrupados por timestamp
+            # Preparar datos para insertar en SQLite3
             grouped_data = df.groupby('time').apply(lambda x: [
-                {"sensor_id": col, "acceleration": row[col]} for _, row in x.iterrows() for col in x.columns if col != 'time'
+                {"sensor_id": col, "acceleration_value": row[col]} 
+                for _, row in x.iterrows() for col in x.columns if col != 'time'
             ]).reset_index(name='sensor_data')
 
-            bulk_insert = [
-                {"timestamp": row['time'], "sensor_data": row['sensor_data']}
-                for _, row in grouped_data.iterrows()
-            ]
+            # Insertar datos en SQLite3
+            for _, row in grouped_data.iterrows():
+                timestamp = row['time']
+                
+                # Insertar en la tabla `timestamps` si no existe
+                cursor.execute('''
+                    INSERT OR IGNORE INTO timestamps (timestamp)
+                    VALUES (?);
+                ''', (timestamp,))
+                
+                cursor.execute('SELECT id FROM timestamps WHERE timestamp = ?', (timestamp,))
+                timestamp_id = cursor.fetchone()[0]
 
-            if bulk_insert:
-                accelerations_collection.insert_many(bulk_insert, ordered=False)
+                # Insertar los datos de aceleración por sensor
+                for sensor_data in row['sensor_data']:
+                    cursor.execute('''
+                        INSERT INTO accelerations (timestamp_id, sensor_id, acceleration_value)
+                        VALUES (?, ?, ?);
+                    ''', (timestamp_id, sensor_data['sensor_id'], sensor_data['acceleration_value']))
+
+            conn.commit()  # Confirmar las transacciones
 
             persistent_buffer.clear()
 
             if config["debug"]:
-                print(f"6) Buffer a MongoDB exitoso. {len(bulk_insert)} timestamps insertados.")
+                print(f"6) Buffer a SQLite3 exitoso. {len(grouped_data)} timestamps insertados.")
             break
 
         except Exception as e:
@@ -80,20 +102,19 @@ def buffer_to_mongodb(persistent_buffer, db_config, config, max_retries=5, initi
                 time.sleep(delay)
                 delay *= 2
             else:
-                close_mongodb_client()
                 print("Se alcanzó el máximo de intentos. No se pudieron guardar los datos.")
             break
-    close_mongodb_client()
+    conn.close()
 
-def backup_data(db_config, buffer_db, raw_db, config, sensor_numbers, stop_event, backup_time):
+
+def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_event, backup_time):
     """
-    Realiza el respaldo de todos los datos de la base de datos buffer a la base de datos grande (raw) en paquetes de 1000 registros.
-    Este proceso se repite cada X segundos, según lo indicado por backup_time.
+    Realiza el respaldo de todos los datos de la base de datos SQLite3 (buffer) a la base de datos MongoDB (raw).
+    Procesa en lotes basados en timestamps y elimina los datos correctamente.
     """
-    client = initialize_mongodb_client(db_config)
-    buffer_collection = client[buffer_db]['accelerations']
+    client = initialize_mongodb_client(db_config)  # Conexión a MongoDB
     raw_collection = client[raw_db]['accelerations']
-    max_batch_size = 50000  # Tamaño máximo de los paquetes para el respaldo
+    max_timestamps_per_batch = 20000  # Procesar por número de timestamps
     delete_in_progress = False
 
     while not stop_event.is_set() or delete_in_progress:
@@ -103,42 +124,92 @@ def backup_data(db_config, buffer_db, raw_db, config, sensor_numbers, stop_event
             print(Fore.GREEN + "----------------------------------------------Iniciando proceso de respaldo..." + Style.RESET_ALL)
 
         try:
-            # Obtener el total de registros en la base de datos buffer
-            total_data = buffer_collection.count_documents({})
+            # Conectar a la base de datos SQLite3 (buffer)
+            conn = connect(sqlite_db_path)
+            cursor = conn.cursor()
 
-            if total_data > 0:
+            # Activar WAL
+            cursor.execute("PRAGMA journal_mode=WAL;")
+
+            # Obtener todos los timestamps únicos ordenados
+            cursor.execute("""
+                SELECT DISTINCT t.id, t.timestamp 
+                FROM timestamps t 
+                JOIN accelerations a ON t.id = a.timestamp_id 
+                ORDER BY t.timestamp ASC
+            """)
+            all_timestamps = cursor.fetchall()
+
+            if all_timestamps:
+                total_timestamps = len(all_timestamps)
                 if config["debug"]:
-                    print(Fore.YELLOW + f"Se encontraron {total_data} registros. Respaldo en paquetes de máximo {max_batch_size} registros." + Style.RESET_ALL)
+                    print(Fore.YELLOW + f"Se encontraron {total_timestamps} timestamps en SQLite3. Procesando en lotes de máximo {max_timestamps_per_batch} timestamps." + Style.RESET_ALL)
 
-                offset = 0
                 total_backed_up = 0
                 delete_in_progress = True  # Marcar que la eliminación está en progreso
 
-                while offset < total_data:
-                    # Obtener el siguiente lote de datos
-                    buffer_data = list(buffer_collection.find().limit(max_batch_size))
-                    if not buffer_data:
-                        break  # Salir del bucle si no hay más datos
+                # Procesar todos los registros en lotes
+                for i in range(0, total_timestamps, max_timestamps_per_batch):
+                    timestamp_batch = all_timestamps[i:i + max_timestamps_per_batch]
 
-                    # Respaldar datos al raw
-                    raw_collection.insert_many(buffer_data, ordered=False)
+                    bulk_insert = []
 
-                    # Contar los registros respaldados
-                    total_backed_up += len(buffer_data)
+                    for timestamp_row in timestamp_batch:
+                        timestamp_id, timestamp = timestamp_row
+
+                        # Obtener todas las aceleraciones asociadas al timestamp actual
+                        cursor.execute("""
+                            SELECT a.sensor_id, a.acceleration_value
+                            FROM accelerations a
+                            WHERE a.timestamp_id = ?
+                        """, (timestamp_id,))
+                        acceleration_data = cursor.fetchall()
+
+                        sensor_data = [
+                            {"sensor_id": str(sensor_id), "acceleration": acceleration_value}
+                            for sensor_id, acceleration_value in acceleration_data
+                        ]
+
+                        # Verificar si el timestamp ya existe en MongoDB
+                        existing_doc = raw_collection.find_one({"timestamp": timestamp})
+                        if existing_doc:
+                            # Fusionar datos si ya existe
+                            updated_sensor_data = existing_doc["sensor_data"] + sensor_data
+                            raw_collection.update_one(
+                                {"_id": existing_doc["_id"]},
+                                {"$set": {"sensor_data": updated_sensor_data}}
+                            )
+                        else:
+                            # Insertar un nuevo documento
+                            bulk_insert.append({
+                                "timestamp": timestamp,
+                                "sensor_data": sensor_data
+                            })
+
+                    # Insertar todos los nuevos documentos en MongoDB
+                    if bulk_insert:
+                        raw_collection.insert_many(bulk_insert, ordered=False)
+
+                    # Eliminar los datos procesados del buffer SQLite
+                    timestamp_ids = [(row[0],) for row in timestamp_batch]
+                    cursor.executemany("DELETE FROM timestamps WHERE id = ?", timestamp_ids)
+                    cursor.execute("""
+                        DELETE FROM accelerations
+                        WHERE timestamp_id NOT IN (
+                            SELECT id FROM timestamps
+                        )
+                    """)
+                    conn.commit()
+
+                    total_backed_up += len(timestamp_batch)
+
                     if config["debug"]:
-                        print(Fore.CYAN + f"Respaldo de paquete {total_backed_up // max_batch_size + 1} completado ({len(buffer_data)} registros)." + Style.RESET_ALL)
-
-                    # Eliminar los datos respaldados del buffer por ID
-                    buffer_collection.delete_many({"_id": {"$in": [doc["_id"] for doc in buffer_data]}})
-                    if config["debug"]:
-                        print(Fore.GREEN + f"**Se han eliminado {len(buffer_data)} registros del buffer.**" + Style.RESET_ALL)
-
-                    offset += len(buffer_data)
+                        print(Fore.CYAN + f"Respaldo de lote completado ({len(timestamp_batch)} timestamps procesados)." + Style.RESET_ALL)
 
                 delete_in_progress = False  # Marcar que la eliminación ha sido completada
 
                 if config["debug"]:
-                    print(Fore.YELLOW + f"Respaldo completado. {total_backed_up} registros transferidos en {time.time() - start_time:.5f} segundos." + Style.RESET_ALL)
+                    print(Fore.YELLOW + f"Respaldo completado. {total_backed_up} timestamps transferidos en {time.time() - start_time:.5f} segundos." + Style.RESET_ALL)
 
             else:
                 if config["debug"]:
@@ -152,39 +223,114 @@ def backup_data(db_config, buffer_db, raw_db, config, sensor_numbers, stop_event
         except Exception as e:
             print(Fore.RED + f"Error durante el respaldo de datos: {e}" + Style.RESET_ALL)
 
+        finally:
+            conn.close()  # Cerrar la conexión a SQLite3
+
     # Si se ha activado el evento de parada, asegurarse de que el proceso de respaldo finalice correctamente
     if stop_event.is_set() and delete_in_progress:
         print(Fore.YELLOW + "Detención solicitada, completando respaldo en curso..." + Style.RESET_ALL)
         try:
-            # Finalizar cualquier respaldo pendiente si el evento de parada se ha activado
-            buffer_data = list(buffer_collection.find().limit(max_batch_size))
+            conn = connect(sqlite_db_path)
+            cursor = conn.cursor()
 
-            while buffer_data:
-                raw_collection.insert_many(buffer_data, ordered=False)
-                buffer_collection.delete_many({"_id": {"$in": [doc["_id"] for doc in buffer_data]}})
-                if config["debug"]:
-                    print(Fore.GREEN + f"Respaldo final de paquete completado ({len(buffer_data)} registros)." + Style.RESET_ALL)
-                buffer_data = list(buffer_collection.find().limit(max_batch_size))
+            # Activar WAL
+            cursor.execute("PRAGMA journal_mode=WAL;")
+
+            # Procesar cualquier dato restante
+            cursor.execute("""
+                SELECT DISTINCT t.id, t.timestamp 
+                FROM timestamps t 
+                JOIN accelerations a ON t.id = a.timestamp_id 
+                ORDER BY t.timestamp ASC
+            """)
+            timestamp_batch = cursor.fetchall()
+
+            while timestamp_batch:
+                bulk_insert = []
+
+                for timestamp_row in timestamp_batch:
+                    timestamp_id, timestamp = timestamp_row
+
+                    # Obtener todas las aceleraciones asociadas al timestamp actual
+                    cursor.execute("""
+                        SELECT a.sensor_id, a.acceleration_value
+                        FROM accelerations a
+                        WHERE a.timestamp_id = ?
+                    """, (timestamp_id,))
+                    acceleration_data = cursor.fetchall()
+
+                    sensor_data = [
+                        {"sensor_id": str(sensor_id), "acceleration": acceleration_value}
+                        for sensor_id, acceleration_value in acceleration_data
+                    ]
+
+                    # Verificar si el timestamp ya existe en MongoDB
+                    existing_doc = raw_collection.find_one({"timestamp": timestamp})
+                    if existing_doc:
+                        # Fusionar datos si ya existe
+                        updated_sensor_data = existing_doc["sensor_data"] + sensor_data
+                        raw_collection.update_one(
+                            {"_id": existing_doc["_id"]},
+                            {"$set": {"sensor_data": updated_sensor_data}}
+                        )
+                    else:
+                        # Insertar un nuevo documento
+                        bulk_insert.append({
+                            "timestamp": timestamp,
+                            "sensor_data": sensor_data
+                        })
+
+                # Insertar todos los nuevos documentos en MongoDB
+                if bulk_insert:
+                    raw_collection.insert_many(bulk_insert, ordered=False)
+
+                # Eliminar los datos procesados del buffer SQLite
+                timestamp_ids = [(row[0],) for row in timestamp_batch]
+                cursor.executemany("DELETE FROM timestamps WHERE id = ?", timestamp_ids)
+                cursor.execute("""
+                    DELETE FROM accelerations
+                    WHERE timestamp_id NOT IN (
+                        SELECT id FROM timestamps
+                    )
+                """)
+                conn.commit()
+
+                cursor.execute("""
+                    SELECT DISTINCT t.id, t.timestamp 
+                    FROM timestamps t 
+                    JOIN accelerations a ON t.id = a.timestamp_id 
+                    ORDER BY t.timestamp ASC
+                """)
+                timestamp_batch = cursor.fetchall()
 
             print(Fore.GREEN + "Respaldo final completado. Buffer eliminado por completo." + Style.RESET_ALL)
 
         except Exception as e:
             print(Fore.RED + f"Error durante el respaldo final de datos: {e}" + Style.RESET_ALL)
 
+        finally:
+            conn.close()
+
     close_mongodb_client()
     print(Fore.RED + "**El proceso de respaldo ha sido detenido correctamente.**" + Style.RESET_ALL)
 
 
 
-def process_data(data_queue, stop_event, total_capture_time, original_rate, decimation_factor, sensor_numbers, db_config, buffer_size, config):
+
+
+def process_data(data_queue, stop_event, total_capture_time, original_rate, decimation_factor, sensor_numbers, sqlite_db_path, config, buffer_size):
     """
-    Procesa los datos capturados y los envía a la base de datos MongoDB.
+    Procesa los datos capturados y los envía a la base de datos SQLite como buffer.
     """
     persistent_buffer = []
     packet_count = 0
     decimated_rate = original_rate // decimation_factor
     interval = 1 / decimated_rate
     last_timestamp = None
+
+    # Verificar que config sea un diccionario
+    if not isinstance(config, dict):
+        raise ValueError("El argumento 'config' debe ser un diccionario.")
 
     while not stop_event.is_set():
         if total_capture_time > 0 and packet_count >= total_capture_time:
@@ -209,7 +355,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
 
             last_timestamp = timestamps[-1]
 
-            df = pd.DataFrame(data.transpose(), index=timestamps, columns=[f'{i}' for i in sensor_numbers])
+            df = DataFrame(data.transpose(), index=timestamps, columns=[f'{i}' for i in sensor_numbers])
             df.reset_index(inplace=True)
             df.rename(columns={'index': 'time'}, inplace=True)
 
@@ -219,9 +365,9 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
 
             persistent_buffer.extend(df.to_dict(orient='records'))
 
-            # Agrupar los datos antes de enviarlos a MongoDB para evitar múltiples inserciones pequeñas
+            # Agrupar los datos antes de enviarlos a SQLite3 para evitar múltiples inserciones pequeñas
             if len(persistent_buffer) >= buffer_size:
-                buffer_to_mongodb(persistent_buffer, db_config, config)
+                buffer_to_db(persistent_buffer, sqlite_db_path, config)  # Usar SQLite3 como buffer
                 persistent_buffer = []
 
             real_time_now = time.time()
@@ -249,12 +395,11 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
             continue
 
     if persistent_buffer:  # Respaldar cualquier dato restante en el buffer
-        buffer_to_mongodb(persistent_buffer, db_config, config)
+        buffer_to_db(persistent_buffer, db_path, config)  # Usar SQLite3 como buffer
 
     if total_capture_time == 0:
         print("Captura continua. Presiona ENTER para terminar.")
     else:
-        close_mongodb_client()  # Cerrar el cliente MongoDB
         print("Captura de datos completada.")
 
     stop_event.set()
@@ -269,7 +414,7 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
     number_of_sensors = len(all_sensor_numbers)
     preserve_row = [i in sensor_numbers for i in all_sensor_numbers]
 
-    with nidaqmx.Task() as task:
+    with Task() as task:
         for i in range(number_of_sensors):
             mod = 1 + i // 3
             ai = i % 3
@@ -282,12 +427,15 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
             if total_capture_time > 0 and (time.time() - start_time >= total_capture_time):
                 stop_event.set()
 
-            data = np.array(task.read(number_of_samples_per_channel=buffer_size)) * sensitivity
+            data = array(task.read(number_of_samples_per_channel=buffer_size)) * sensitivity
             data = data[preserve_row, :]
             data_queue.put(data)
 
 
-def run_data_acquisition(deviceName, total_capture_time, original_rate, decimation_factor, min_val, max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers, db_config, config, backup_time, restart_time_in_seconds, stop_event):
+def run_data_acquisition(deviceName, total_capture_time, original_rate, decimation_factor, 
+                         min_val, max_val, sensitivity, buffer_size, sensor_numbers, 
+                         sensor_numbers_all, sqlite_db_path, db_config, config, 
+                         backup_time, restart_time_in_seconds, stop_event):
     """
     Función principal para iniciar la adquisición de datos con la configuración establecida.
     """
@@ -297,22 +445,29 @@ def run_data_acquisition(deviceName, total_capture_time, original_rate, decimati
     # Proceso para capturar datos del DAQ
     capture_process = Process(target=capture_data, args=(
         data_queue, stop_event, deviceName, total_capture_time, original_rate, 
-        min_val, max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers, config))
+        min_val, max_val, sensitivity, buffer_size, sensor_numbers, sensor_numbers_all, config))
     
     # Proceso para procesar los datos capturados
     processing_process = Process(target=process_data, args=(
         data_queue, stop_event, total_capture_time, original_rate, decimation_factor, 
-        sensor_numbers, db_config, buffer_size, config))
+        sensor_numbers, sqlite_db_path, config, buffer_size))
 
-    # Proceso de respaldo que corre en paralelo
-    backup_process = Process(target=backup_data, args=(db_config, db_config['db_name'], db_config['db_backup_name'], config, sensor_numbers, stop_event, backup_time))
+    backup_process = Process(target=backup_data, args=(
+        db_config,              # Configuración de MongoDB
+        sqlite_db_path,         # Ruta a la base de datos SQLite (buffer)
+        db_config["db_backup_name"],  # Nombre de la base de datos MongoDB raw
+        config,                 # Configuración general
+        sensor_numbers,         # Números de sensores
+        stop_event,             # Evento de parada
+        config["backup_time"]   # Tiempo de respaldo (en segundos)
+    ))
 
     capture_process.start()
     processing_process.start()
     backup_process.start()
 
     if restart_time_in_seconds > 0:
-        print(f"Esperando {restart_time_in_seconds} segundos para detener o presionar ENTER.")
+        print(f"Esperando {restart_time_in_seconds} segundos para reiniciar la toma de datos o presionar ENTER para detener.")
         stop_event.wait(timeout=restart_time_in_seconds)  # Detener tras el tiempo de reinicio o por ENTER
     else:
         input("Presiona ENTER para detener.")  # Si el restart_time es 0, esperar manualmente por ENTER
@@ -333,6 +488,7 @@ def run_data_acquisition(deviceName, total_capture_time, original_rate, decimati
         close_mongodb_client()  # Cerrar el cliente MongoDB
     end_time = time.time()
     print(f"Todos los procesos han finalizado. {end_time}, tiempo total {end_time - start_time}.")
+
 
 if __name__ == "__main__":
     pass  # Este archivo no está destinado a ejecutarse directamente

@@ -7,18 +7,21 @@ def load_config():
                 parts = line.split('#')
                 key_value_part = parts[0].strip()
                 key, value = key_value_part.split(': ')
-                
-                # Convertir el valor de debug en booleano
                 if key == 'debug':
                     config[key] = value.lower() == 'true'
                 else:
                     config[key] = value
 
     # Convertir valores numéricos
-    numeric_keys = ["total_capture_time", "original_rate", "buffer_size", "decimation_factor", "min_val", "max_val", "sensitivity", "db_port"]
+    numeric_keys = ["total_capture_time", "original_rate", "buffer_size", "decimation_factor", 
+                    "min_val", "max_val", "sensitivity", "db_port", "backup_time"]
     for key in numeric_keys:
         if key in config:
             config[key] = float(config[key]) if key in ["min_val", "max_val", "sensitivity"] else int(config[key])
+
+        # Ajustar restart_time si total_capture_time > 0
+    if config.get("total_capture_time", 0) > 0:
+        config["restart_time"] = "0s"  # Reinicio deshabilitado        
 
     return config
 
@@ -27,6 +30,7 @@ def parse_restart_time(restart_time_str):
     Convierte la cadena de reinicio en segundos.
     Ejemplos:
     - "10s" -> 10 segundos
+    - "1h"  -> 1 hora en segundos
     - "1d"  -> 1 día en segundos
     - "1w"  -> 1 semana en segundos
     """
@@ -35,6 +39,8 @@ def parse_restart_time(restart_time_str):
 
     if unit == "s":
         return time_value  # En segundos
+    elif unit == "h":
+        return time_value * 3600  # Horas a segundos
     elif unit == "d":
         return time_value * 86400  # Días a segundos
     elif unit == "w":
