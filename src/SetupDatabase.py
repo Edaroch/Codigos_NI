@@ -1,6 +1,7 @@
 from sqlite3 import connect  # Solo se importa la función connect de sqlite3
 from os import makedirs, path  # Solo se importan makedirs y path
-from pymongo import MongoClient, ASCENDING  # Importar MongoClient y ASCENDING de pymongo
+from pymongo import MongoClient, ASCENDING, errors  # Importar MongoClient y ASCENDING de pymongo
+from colorama import Fore, Style
 
 def create_sqlite_path_if_not_exists(sqlite_db_path):
     """
@@ -125,18 +126,29 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
     conn.commit()
 
     # Insertar sensores en SQLite
-    for sensor_number in sensor_numbers:
-        cursor.execute('INSERT OR IGNORE INTO sensors (sensor_number) VALUES (?)', (sensor_number,))
+    existing_sensors = set(row[0] for row in cursor.execute("SELECT sensor_number FROM sensors").fetchall())
+    new_sensors = [sn for sn in sensor_numbers if sn not in existing_sensors]
+
+    for sensor_number in new_sensors:
+        cursor.execute('INSERT INTO sensors (sensor_number) VALUES (?)', (sensor_number,))
     conn.commit()
     conn.close()
     print("Configuración de la base de datos SQLite completa.")
 
-    # Configuración de MongoDB
+
+# Configuración de MongoDB
+    mongo_client = None
+    if config['backup_time'] == 0:
+        if config["debug"]:
+            print(Fore.RED + "Backup_time es 0, no se configura base de datos en MongoDB" + Style.RESET_ALL)
+        return
     try:
-        client = MongoClient(config['db_host'], config['db_port'])
+        # Inicializar cliente MongoDB
+        mongo_client = MongoClient(config['db_host'], config['db_port'], serverSelectionTimeoutMS=5000)
+        mongo_client.admin.command('ping')  # Validar conexión
 
         # Configurar la base de datos raw (almacenamiento histórico)
-        db_raw = client[config['db_backup_name']]
+        db_raw = mongo_client[config['db_backup_name']]
         sensors_collection_raw = db_raw['sensors']
         accelerations_collection_raw = db_raw['accelerations']
 
@@ -156,10 +168,17 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
             print(f"Se han añadido {len(new_sensors_raw)} sensores nuevos en la base de datos raw.")
 
         print("Configuración de la base de datos raw completa en MongoDB.")
+
+    except errors.ServerSelectionTimeoutError as e:
+        print(f"Error al conectar con MongoDB: {e}")
+        print(Fore.RED + "MongoDB no está disponible. Se desactivarán los respaldos. Tiempo de respaldo se modificará a 0"+ Style.RESET_ALL)
+        config['backup_time'] = 0
     except Exception as e:
         print(f"Error al configurar MongoDB: {e}")
+        config['backup_time'] = 0
     finally:
-        client.close()
+        if mongo_client:
+            mongo_client.close()
 
 
 if __name__ == "__main__":

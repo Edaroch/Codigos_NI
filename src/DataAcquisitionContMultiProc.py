@@ -25,10 +25,21 @@ from colorama import Fore, Style
 mongo_client = None
 
 def initialize_mongodb_client(db_config):
-    """Inicializa el cliente MongoDB si no está ya inicializado."""
+    """
+    Initializes the MongoDB client if not already initialized.
+    Handles connection errors and returns None if MongoDB is unavailable.
+    """
     global mongo_client
     if mongo_client is None:
-        mongo_client = MongoClient(db_config['db_host'], db_config['db_port'])
+        try:
+            # Create the MongoDB client with a 5-second timeout
+            mongo_client = MongoClient(db_config['db_host'], db_config['db_port'], serverSelectionTimeoutMS=5000)
+            
+            # Test the connection by pinging the server
+            mongo_client.admin.command('ping')
+        except errors.ServerSelectionTimeoutError:
+            print("Error: Cannot connect to MongoDB. Backups will be disabled.")
+            mongo_client = None  # Ensure the client remains None if connection fails
     return mongo_client
 
 def close_mongodb_client():
@@ -45,53 +56,61 @@ def buffer_to_db(persistent_buffer, db_path, config, max_retries=5, initial_dela
     attempt = 0
     delay = initial_delay
 
-    # Conexión a SQLite3
-    conn = connect(db_path)
-    cursor = conn.cursor()
-
-    # Activar WAL
-    cursor.execute("PRAGMA journal_mode=WAL;")
-
     while attempt < max_retries:
         try:
+            # Conexión a SQLite3
+            conn = connect(db_path)
+            cursor = conn.cursor()
+
+            # Activar WAL
+            cursor.execute("PRAGMA journal_mode=WAL;")
+
             # Crear DataFrame para manejar los datos
             df = DataFrame(persistent_buffer)
 
             if config["debug"]:
-                print(f"5) Datos pasando por la base de datos: {len(df)} registros.")
+                print(f"5) Datos pasando por la base de datos: {len(df)} registros por sensor.")
 
-            # Preparar datos para insertar en SQLite3
-            grouped_data = df.groupby('time').apply(lambda x: [
-                {"sensor_id": col, "acceleration_value": row[col]} 
-                for _, row in x.iterrows() for col in x.columns if col != 'time'
-            ]).reset_index(name='sensor_data')
+            # Obtener timestamps únicos e insertar en `timestamps`
+            timestamps = df['time'].unique()
+            cursor.executemany("INSERT OR IGNORE INTO timestamps (timestamp) VALUES (?)", [(ts,) for ts in timestamps])
+            conn.commit()
 
-            # Insertar datos en SQLite3
-            for _, row in grouped_data.iterrows():
+            # Generar mapeo de timestamps con sus IDs
+            timestamp_ids = {
+                ts: cursor.execute("SELECT id FROM timestamps WHERE timestamp = ?", (ts,)).fetchone()[0]
+                for ts in timestamps
+            }
+
+            # Generar mapeo de sensores con sus IDs
+            sensor_ids = {
+                col: cursor.execute("SELECT id FROM sensors WHERE sensor_number = ?", (col,)).fetchone()[0]
+                for col in df.columns if col != 'time'
+            }
+
+            # Preparar datos para insertar en `accelerations`
+            sensor_data = []
+            for index, row in df.iterrows():
                 timestamp = row['time']
-                
-                # Insertar en la tabla `timestamps` si no existe
-                cursor.execute('''
-                    INSERT OR IGNORE INTO timestamps (timestamp)
-                    VALUES (?);
-                ''', (timestamp,))
-                
-                cursor.execute('SELECT id FROM timestamps WHERE timestamp = ?', (timestamp,))
-                timestamp_id = cursor.fetchone()[0]
+                timestamp_id = timestamp_ids[timestamp]
+                for col in df.columns:
+                    if col != 'time':  # Ignorar la columna de tiempo
+                        sensor_number = col
+                        sensor_id = sensor_ids[sensor_number]
+                        sensor_data.append((timestamp_id, sensor_id, row[col]))
 
-                # Insertar los datos de aceleración por sensor
-                for sensor_data in row['sensor_data']:
-                    cursor.execute('''
-                        INSERT INTO accelerations (timestamp_id, sensor_id, acceleration_value)
-                        VALUES (?, ?, ?);
-                    ''', (timestamp_id, sensor_data['sensor_id'], sensor_data['acceleration_value']))
-
+            # Insertar los datos en la tabla `accelerations`
+            cursor.executemany(
+                "INSERT INTO accelerations (timestamp_id, sensor_id, acceleration_value) VALUES (?, ?, ?)",
+                sensor_data
+            )
             conn.commit()  # Confirmar las transacciones
+            conn.close()
 
             persistent_buffer.clear()
 
             if config["debug"]:
-                print(f"6) Buffer a SQLite3 exitoso. {len(grouped_data)} timestamps insertados.")
+                print(f"6) Buffer a SQLite3 exitoso. {len(sensor_data)} aceleraciones insertadas.")
             break
 
         except Exception as e:
@@ -104,7 +123,11 @@ def buffer_to_db(persistent_buffer, db_path, config, max_retries=5, initial_dela
             else:
                 print("Se alcanzó el máximo de intentos. No se pudieron guardar los datos.")
             break
-    conn.close()
+
+        finally:
+            if 'conn' in locals() and conn:
+                conn.close()
+
 
 
 def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_event, backup_time):
@@ -112,7 +135,18 @@ def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_
     Realiza el respaldo de todos los datos de la base de datos SQLite3 (buffer) a la base de datos MongoDB (raw).
     Procesa en lotes basados en timestamps y elimina los datos correctamente.
     """
+
+    if backup_time == 0:
+        
+        print(Fore.RED + "El tiempo de respaldo es 0. No se realizarán respaldos a MongoDB." + Style.RESET_ALL)
+        return
+
     client = initialize_mongodb_client(db_config)  # Conexión a MongoDB
+    if not client:
+        config['backup_time'] = 0  # Disable backups if MongoDB is unavailable
+        print(Fore.RED + "MongoDB Server no se encuentra, los respaldos están desactivados." + Style.RESET_ALL)
+        return
+
     raw_collection = client[raw_db]['accelerations']
     max_timestamps_per_batch = 20000  # Procesar por número de timestamps
     delete_in_progress = False
@@ -339,6 +373,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
         try:
             packet_start_time = time.time()
             if config["debug"]:
+                print(Fore.GREEN + f"------------------NEW PACKAGE--------------------"+ Style.RESET_ALL)
                 print(f"1) Tiempo real inicial {packet_start_time}.")
             raw_data = data_queue.get(True, 2)
             packet_count += 1
@@ -389,7 +424,6 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
             time_difference = (real_time_now - last_timestamp) - interval
             if config["debug"]:
                 print(f"9) Diferencia entre el tiempo actual menos el último timestamp, si es positivo se atrasa: {time_difference:.5f} segundos.")
-                print(f"--------------------------------------------")
 
         except queue.Empty:
             continue
@@ -398,9 +432,9 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
         buffer_to_db(persistent_buffer, db_path, config)  # Usar SQLite3 como buffer
 
     if total_capture_time == 0:
-        print("Captura continua. Presiona ENTER para terminar.")
+        print(Fore.GREEN + "Captura continua. Presiona ENTER para terminar."+ Style.RESET_ALL)
     else:
-        print("Captura de datos completada.")
+        print(Fore.RED + "CAPTURA DE DATOS COMPLETADA. Presiona ENTER para terminar."+ Style.RESET_ALL)
 
     stop_event.set()
 
