@@ -49,7 +49,7 @@ def close_mongodb_client():
         mongo_client.close()
         mongo_client = None  # Resetear para asegurarnos de que se puede reinicializar más adelante
 
-def buffer_to_db(persistent_buffer, db_path, config, max_retries=5, initial_delay=0.5):
+def buffer_to_db(persistent_buffer, sqlite_db_path, config, max_retries=5, initial_delay=0.5):
     """
     Inserta datos en la base de datos SQLite3.
     """
@@ -59,7 +59,7 @@ def buffer_to_db(persistent_buffer, db_path, config, max_retries=5, initial_dela
     while attempt < max_retries:
         try:
             # Conexión a SQLite3
-            conn = connect(db_path)
+            conn = connect(sqlite_db_path)
             cursor = conn.cursor()
 
             # Activar WAL
@@ -429,7 +429,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
             continue
 
     if persistent_buffer:  # Respaldar cualquier dato restante en el buffer
-        buffer_to_db(persistent_buffer, db_path, config)  # Usar SQLite3 como buffer
+        buffer_to_db(persistent_buffer, sqlite_db_path, config)  # Usar SQLite3 como buffer
 
     if total_capture_time == 0:
         print(Fore.GREEN + "Captura continua. Presiona ENTER para terminar."+ Style.RESET_ALL)
