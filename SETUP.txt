@@ -1,32 +1,32 @@
 # CONFIGURACION DE CAPTURA
-total_capture_time: 0                       # Tiempo total de captura en segundos (0 para captura continua).
-backup_time: 600                            # Tiempo en segundos entre cada respaldo de la base de datos SQLite3 a MongoDB.
-restart_time: 1h                            # Configuración de reinicio, 0 para adquisición continua, 10s para cada diez segundos, 1h para cada una hora , 1d para cada un día y 1w para cada una semana.
-debug: True                                 # Modo de depuración, True para activar debug logs, False para desactivarlos.
+total_capture_time: 0 # Tiempo total de captura en segundos (0 para captura continua).
+backup_time: 600 # Tiempo en segundos entre cada respaldo de la base de datos SQLite3 a MongoDB (0 para que no haga respaldos).
+restart_time: 6h # Configuración de reinicio, 0 para adquisición continua, 10s para cada diez segundos, 1h para cada una hora , 1d para cada un día y 1w para cada una semana.
+debug: true # Modo de depuración, True para activar debug logs, False para desactivarlos.
 
 # CONFIGURACION DEL DAQ
-deviceName: cDAQ1                           # Nombre del dispositivo de adquisición de datos cDAQ9185-21DA9E1.
-original_rate: 200                          # Frecuencia de muestreo original en Hz del DAQ. De 2Hz a 24000Hz.
-buffer_size: 400                            # Tamaño del buffer del DAQ para la captura de datos. El DAQ envia datos cuando se llena el buffer. Si capturas a 200Hz y el buffer_size es 600, enviará datos cada 3 segundos.
-decimation_factor: 1                        # Factor de decimación para reducir la frecuencia de muestreo.
-daq_num_modules: 2                          # Número de módulos conectados al DAQ.
-daq_ch_per_module: 3                        # Número de canales que tiene cada módulo del DAQ (en general, 3).
-unused_ch: nan                              # 2 posibilidades: nan (todos usados) / números de dos cifras separados por comas (ej: 21, 22) donde ij: i-> núm. módulo; j-> núm. channel.
+deviceName: cDAQ1 # Nombre del dispositivo de adquisición de datos cDAQ9185-21DA9E1.
+original_rate: 200 # Frecuencia de muestreo original en Hz del DAQ. De 2Hz a 24000Hz.
+buffer_size: 400 # Tamaño del buffer del DAQ para la captura de datos. El DAQ envia datos cuando se llena el buffer. Si capturas a 200Hz y el buffer_size es 600, enviará datos cada 3 segundos.
+decimation_factor: 1 # Factor de decimación para reducir la frecuencia de muestreo.
+daq_num_modules: 2 # Número de módulos conectados al DAQ.
+daq_ch_per_module: 3 # Número de canales que tiene cada módulo del DAQ (en general, 3).
+unused_ch: nan # 2 posibilidades: nan (todos usados) / números de dos cifras separados por comas (ej: 21, 22) donde ij: i-> núm. módulo; j-> núm. channel.
 
 # CONFIGURACION DE LOS SENSORES
-min_val: -0.006                             # Valor mínimo esperado en las mediciones (depende del sensor).
-max_val: 0.006                              # Valor máximo esperado en las mediciones (depende del sensor).
-sensitivity: 10.0                           # Sensibilidad del dispositivo (depende del sensor).
+min_val: -0.006 # Valor mínimo esperado en las mediciones (depende del sensor).
+max_val: 0.006 # Valor máximo esperado en las mediciones (depende del sensor).
+sensitivity: 10.0 # Sensibilidad del dispositivo (depende del sensor).
 
 ## CONFIGURACION BASES DE DATOS
 
 # SQLite (base de datos buffer)
-sqlite_db_path: C:\xampp\htdocs\APIRest\sqldb\accelerations.db   # Ruta de la base de datos SQLite3 que actúa como buffer temporal.
+sqlite_db_path: C:\xampp\htdocs\APIRest\sqldb\accelerations.db # Ruta de la base de datos SQLite3 que actúa como buffer temporal.
 
 # MongoDB (base de datos de respaldo), la ruta se define en la configuración del server de MongoDB
-db_host: localhost                          # Dirección del host donde corre MongoDB.
-db_port: 27017                              # Puerto del servidor MongoDB.
-db_backup_name: acquisition_db_raw          # Nombre de la base de datos grande para almacenamiento histórico.
+db_host: localhost # Dirección del host donde corre MongoDB.
+db_port: 27017 # Puerto del servidor MongoDB.
+db_backup_name: acquisition_db_raw # Nombre de la base de datos grande para almacenamiento histórico.
 
 
 
