@@ -12,7 +12,7 @@ Python 3.10.9
 from nidaqmx import Task
 from nidaqmx.constants import AcquisitionType, AccelUnits, AccelSensitivityUnits
 from pandas import DataFrame
-from numpy import array
+from numpy import array, concatenate
 from pymongo import MongoClient, errors
 from sqlite3 import connect
 import time
@@ -382,7 +382,10 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
 
             if config["debug"]:
                 print(f"2) Shape {data.shape} procesado.")
-                print(f"2.1) [{datetime.now()}] [DEBUG] Tamaño actual de data_queue: {data_queue.qsize()}")
+                if data_queue.qsize() > 0:
+                    print(Fore.RED + f"3) Tamaño actual de data_queue: {data_queue.qsize()}"+ Style.RESET_ALL)
+                else:
+                    print(Fore.GREEN + f"3) Tamaño actual de data_queue: {data_queue.qsize()}"+ Style.RESET_ALL)
 
             if last_timestamp is None:
                 timestamps = [packet_start_time + i * interval for i in range(len(data[0]))]
@@ -397,8 +400,8 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
             df.rename(columns={'index': 'time'}, inplace=True)
 
             if config["debug"]:
-                print(f"3) Paquete número {packet_count} procesado.")
-                print(f"4) Timestamps para el paquete {packet_count}: desde {timestamps[0]} hasta {timestamps[-1]}")
+                print(f"4) Paquete número {packet_count} procesado.")
+                print(f"5) Timestamps para el paquete {packet_count}: desde {timestamps[0]} hasta {timestamps[-1]}")
 
             persistent_buffer.extend(df.to_dict(orient='records'))
 
@@ -409,23 +412,23 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
 
             real_time_now = time.time()
             if config["debug"]:
-                print(f"5) Tiempo real final {real_time_now}.")
+                print(f"6) Tiempo real final {real_time_now} y tiempo real {(real_time_now - packet_start_time)}.")
 
             # Calcular el tiempo de espera necesario
-            waiting_time = (last_timestamp - timestamps[0] + interval - (real_time_now - packet_start_time))
+            waiting_time = (last_timestamp - timestamps[0] + interval - (real_time_now - packet_start_time)) #
             if config["debug"]:
-                print(f"6) Tiempo de espera necesario: {waiting_time:.5f} segundos.")
-                print(f"7) Tiempo de proceso hasta ahora: {real_time_now - packet_start_time} segundos.")
-                print(f"8) Tiempo total entre paquetes: {waiting_time + (real_time_now - packet_start_time)} segundos.")
+                print(f"7) Tiempo de espera necesario: {waiting_time:.5f} segundos.")
+                print(f"8) Tiempo de proceso hasta ahora: {real_time_now - packet_start_time} segundos.")
+                print(f"9) Tiempo total entre paquetes: {waiting_time + (real_time_now - packet_start_time)} segundos.")
 
             # Dormir solo si el tiempo de espera es positivo
             if waiting_time > 0:
                 time.sleep(waiting_time)
 
             real_time_now = time.time()
-            time_difference = (real_time_now - last_timestamp) - interval
+            time_difference = (real_time_now - last_timestamp - interval) # Diferencia de tiempo real
             if config["debug"]:
-                print(f"9) Diferencia entre el tiempo actual menos el último timestamp, si es positivo se atrasa: {time_difference:.5f} segundos.")
+                print(f"10) Diferencia de tiempo real: {time_difference:.5f} segundos. RETRASO POR PROCESAMIENTO.")
                 
         except queue.Empty:
             continue
@@ -491,14 +494,14 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
 
             try:
                 # Leer datos del DAQ
-                data = np.array(task.read(number_of_samples_per_channel=buffer_size)) * sensitivity
+                data = array(task.read(number_of_samples_per_channel=buffer_size)) * sensitivity
                 data = data[preserve_row, :]  # Filtrar sensores seleccionados
                 data_accumulated.append(data)
 
                 # Verificar si ha pasado un segundo
                 if current_time - last_time >= 1.0:
                     # Concatenar datos acumulados
-                    all_data = np.concatenate(data_accumulated, axis=1)
+                    all_data = concatenate(data_accumulated, axis=1)
                     data_accumulated = []  # Limpiar datos acumulados
 
                     # Contar cantidad de datos capturados
@@ -509,15 +512,15 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
                         decimation_factor = samples_captured // total_expected_samples
                         all_data = all_data[:, ::decimation_factor]
                         if config["debug"]:
-                            print(f"[DEBUG] Decimación aplicada. Factor: {decimation_factor}")
+                            print(f"1.1) CAPTURA Decimación aplicada. Factor: {decimation_factor}")
 
                     # Colocar datos en la cola
                     data_queue.put(all_data)
                     last_time = current_time  # Actualizar tiempo del último paquete
 
                     if config["debug"]:
-                        print(f"[DEBUG] Paquete colocado. Capturados: {samples_captured}, Esperados: {total_expected_samples}")
-                        print(f"[DEBUG] Tiempo actual: {current_time:.2f}s")
+                        print(f"1.2) CAPTURA Paquete colocado. Capturados: {samples_captured}, Esperados: {total_expected_samples}")
+                        print(f"1.3) CAPTURA Tiempo actual: {current_time:.2f}s")
 
             except Exception as e:
                 print(f"[ERROR] Error al capturar datos: {e}")
