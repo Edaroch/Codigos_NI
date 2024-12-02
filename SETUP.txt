@@ -7,7 +7,7 @@ debug: true # Modo de depuración, True para activar debug logs, False para desa
 # CONFIGURACION DEL DAQ
 deviceName: cDAQ1 # Nombre del dispositivo de adquisición de datos cDAQ9185-21DA9E1.
 original_rate: 200 # Frecuencia de muestreo original en Hz del DAQ. De 2Hz a 24000Hz.
-buffer_size: 400 # Tamaño del buffer del DAQ para la captura de datos. El DAQ envia datos cuando se llena el buffer. Si capturas a 200Hz y el buffer_size es 600, enviará datos cada 3 segundos.
+buffer_size: 200 # Tamaño del buffer del DAQ para la captura de datos. El DAQ envia datos cuando se llena el buffer. Si capturas a 200Hz y el buffer_size es 600, enviará datos cada 3 segundos.
 decimation_factor: 1 # Factor de decimación para reducir la frecuencia de muestreo.
 daq_num_modules: 2 # Número de módulos conectados al DAQ.
 daq_ch_per_module: 3 # Número de canales que tiene cada módulo del DAQ (en general, 3).
