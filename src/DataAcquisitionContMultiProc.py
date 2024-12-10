@@ -458,8 +458,8 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
     preserve_row = [i in sensor_numbers for i in all_sensor_numbers]
 
     # Calcular datos esperados por segundo
-    expected_samples_per_second = original_rate * buffer_size / original_rate
-    total_expected_samples = int(buffer_size)
+    expected_samples_per_second = original_rate
+    total_expected_samples = int(original_rate * 1)  # Muestras esperadas en 1 segundo
 
     with Task() as task:
         for i in range(number_of_sensors):
@@ -494,22 +494,21 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
 
             try:
                 # Leer datos del DAQ
-                data = array(task.read(number_of_samples_per_channel=buffer_size)) * sensitivity
+                data = np.array(task.read(number_of_samples_per_channel=buffer_size)) * sensitivity
                 data = data[preserve_row, :]  # Filtrar sensores seleccionados
                 data_accumulated.append(data)
 
                 # Verificar si ha pasado un segundo
                 if current_time - last_time >= 1.0:
                     # Concatenar datos acumulados
-                    all_data = concatenate(data_accumulated, axis=1)
+                    all_data = np.concatenate(data_accumulated, axis=1)
                     data_accumulated = []  # Limpiar datos acumulados
 
                     # Contar cantidad de datos capturados
                     samples_captured = all_data.shape[1]  # Cantidad de columnas (tiempo)
 
                     if samples_captured != total_expected_samples:
-                        # Aplicar decimación si los datos no coinciden
-                        decimation_factor = samples_captured // total_expected_samples
+                        decimation_factor = max(1, samples_captured // total_expected_samples)
                         all_data = all_data[:, ::decimation_factor]
                         if config["debug"]:
                             print(f"1.1) CAPTURA Decimación aplicada. Factor: {decimation_factor}")
@@ -522,8 +521,11 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
                         print(f"1.2) CAPTURA Paquete colocado. Capturados: {samples_captured}, Esperados: {total_expected_samples}")
                         print(f"1.3) CAPTURA Tiempo actual: {current_time:.2f}s")
 
+                time.sleep(0.01)  # Pausa para evitar uso excesivo de CPU
+
             except Exception as e:
                 print(f"[ERROR] Error al capturar datos: {e}")
+
 
 
 

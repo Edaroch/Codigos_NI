@@ -90,6 +90,10 @@ class AcquisitionGUI:
         # Variable para rastrear si los datos fueron actualizados
         self.is_updated = False
 
+        # Diccionario para almacenar los checkboxes dinámicos de sensores
+        self.sensor_selection = {}  
+
+
         # Crear el panel principal con scrollbar
         self.create_scrollable_panel()
 
@@ -115,6 +119,8 @@ class AcquisitionGUI:
         # Manejar evento de cierre de ventana
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+
+        
     def backup_setup_file(self):
         """Crea una copia de seguridad del archivo SETUP.txt"""
         try:
@@ -155,8 +161,9 @@ class AcquisitionGUI:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scroll_y.set)
 
-        canvas.pack(side="left", fill="both", expand=True)
-        scroll_y.pack(side="right", fill="y")
+        # Hacer que el panel sea dinámico
+        canvas.pack(side="left", fill=tk.BOTH, expand=True)
+        scroll_y.pack(side="right", fill=tk.Y)
 
         self.create_setup_panel(scrollable_frame)
 
@@ -180,9 +187,22 @@ class AcquisitionGUI:
             
 
     def create_plot_panel(self):
-        """Crea un panel para mostrar el gráfico."""
+        """Crea un panel para mostrar el gráfico y los checkboxes dinámicos."""
         plot_frame = tk.Frame(self.root)
-        plot_frame.pack(pady=20, fill=tk.BOTH, expand=True)
+        plot_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+
+        # Crear sub-marco para botones y actualización automática
+        button_frame = tk.Frame(plot_frame)
+        button_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
+
+        # Checkbox para autoactualización
+        self.auto_update_var = tk.IntVar()
+        tk.Checkbutton(
+            button_frame, text="Actualización automática", variable=self.auto_update_var, command=self.toggle_auto_update
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Botón para actualizar el gráfico manualmente
+        tk.Button(button_frame, text="Actualizar Gráfico", command=self.update_plot).pack(side=tk.LEFT, padx=5)
 
         # Crear el gráfico inicial vacío
         self.figure = plt.Figure(figsize=(5, 2), dpi=100)
@@ -195,22 +215,49 @@ class AcquisitionGUI:
         self.canvas = FigureCanvasTkAgg(self.figure, master=plot_frame)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # Checkbox para autoactualización
-        self.auto_update_var = tk.IntVar()
-        tk.Checkbutton(
-            plot_frame, text="Actualización automática", variable=self.auto_update_var, command=self.toggle_auto_update
-        ).pack(side=tk.LEFT, padx=5)
+        # Panel para checkboxes dinámicos de sensores
+        self.checkbox_frame = tk.Frame(plot_frame)
+        self.checkbox_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 
-        # Botón para actualizar el gráfico manualmente
-        tk.Button(plot_frame, text="Actualizar Gráfico", command=self.update_plot).pack(side=tk.LEFT, padx=5)
+        # Crear checkboxes dinámicos basados en los sensores detectados
+        self.update_sensor_checkboxes()
+
+
+    def update_sensor_checkboxes(self):
+        """Actualiza los checkboxes para reflejar los sensores detectados en la base de datos."""
+        # Eliminar cualquier checkbox existente
+        for widget in self.checkbox_frame.winfo_children():
+            widget.destroy()
+
+        # Detectar sensores desde la base de datos
+        db_path = self.config.get("sqlite_db_path", "")
+        if not db_path:
+            return
+
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            query = "SELECT DISTINCT sensor_number FROM sensors"
+            sensor_numbers = [row[0] for row in conn.execute(query).fetchall()]
+
+        # Crear checkboxes dinámicos
+        for sensor in sensor_numbers:
+            var = tk.BooleanVar(value=True)  # Por defecto, marcados
+            chk = tk.Checkbutton(self.checkbox_frame, text=f"Sensor {sensor}", variable=var)
+            chk.pack(side=tk.LEFT, padx=5)
+            self.sensor_selection[sensor] = var
+
 
     def load_last_20_seconds(self):
         """
         Carga los datos de los últimos 20 segundos registrados desde SQLite.
+        Solo carga los datos de los sensores seleccionados.
         """
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path:
             return pd.DataFrame()
+
+        # Obtener sensores seleccionados
+        selected_sensors = [sensor for sensor, var in self.sensor_selection.items() if var.get()]
 
         with sqlite3.connect(db_path) as conn:
             conn.execute("PRAGMA journal_mode=WAL;")
@@ -227,14 +274,15 @@ class AcquisitionGUI:
                 FROM accelerations a
                 JOIN timestamps t ON a.timestamp_id = t.id
                 JOIN sensors s ON a.sensor_id = s.id
-                WHERE t.timestamp BETWEEN ? AND ?
+                WHERE t.timestamp BETWEEN ? AND ? AND s.sensor_number IN ({','.join(['?'] * len(selected_sensors))})
                 ORDER BY t.timestamp ASC
             """
-            df = pd.read_sql_query(query, conn, params=(start_timestamp, end_timestamp))
+            df = pd.read_sql_query(query, conn, params=(start_timestamp, end_timestamp, *selected_sensors))
 
         if not df.empty:
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
         return df
+
 
     def update_plot(self):
         """
@@ -255,6 +303,7 @@ class AcquisitionGUI:
             self.ax.legend(loc='upper right')
 
         self.canvas.draw()
+
 
     def toggle_auto_update(self):
         """Activa o desactiva la autoactualización del gráfico."""
