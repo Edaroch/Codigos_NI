@@ -12,6 +12,10 @@ def load_config():
                 else:
                     config[key] = value
 
+    # Combinar sqlite_db_path y sqlite_name
+    if 'db_path' in config and 'sqlite_name' in config:
+        config['sqlite_db_path'] = f"{config['db_path']}{config['sqlite_name']}.db"
+
     # Convertir valores numéricos
     numeric_keys = ["total_capture_time", "original_rate", "buffer_size", "decimation_factor", 
                     "min_val", "max_val", "sensitivity", "db_port", "backup_time"]
@@ -19,7 +23,7 @@ def load_config():
         if key in config:
             config[key] = float(config[key]) if key in ["min_val", "max_val", "sensitivity"] else int(config[key])
 
-        # Ajustar restart_time si total_capture_time > 0
+    # Ajustar restart_time si total_capture_time > 0
     if config.get("total_capture_time", 0) > 0:
         config["restart_time"] = "0s"  # Reinicio deshabilitado        
 

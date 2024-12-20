@@ -43,8 +43,8 @@ def get_sensor_numbers(config):
     # Get preliminar list of sensor numbers
     sensor_numbers = list()
     daq_num_modules, daq_ch_per_module = int(daq_num_modules), int(daq_ch_per_module)
-    for ai in [i for i in range(daq_ch_per_module)]:
-        for mod in [j + 1 for j in range(daq_num_modules)]:
+    for mod in [j + 1 for j in range(daq_num_modules)]:
+        for ai in [i for i in range(daq_ch_per_module)]:
             sensor_numbers.append(10 * mod + ai)
     sensor_numbers_all = [i for i in sensor_numbers]
 
@@ -65,7 +65,8 @@ def get_sensor_numbers(config):
     if exist_unused_ch:
         for i in unused_ch:
             sensor_numbers.remove(i)
-
+    print(sensor_numbers)
+    print(sensor_numbers_all)
     return sensor_numbers, sensor_numbers_all
 
 

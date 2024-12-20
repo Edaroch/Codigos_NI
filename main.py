@@ -50,6 +50,8 @@ def main():
         stop_event.set()
         process_stop_event.set()
 
+
+
     # Iniciar un hilo para esperar a que el usuario presione ENTER
     stop_thread = Thread(target=stop_acquisition)
     stop_thread.start()
