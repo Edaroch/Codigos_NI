@@ -350,15 +350,13 @@ def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_
     print(Fore.RED + "**El proceso de respaldo ha sido detenido correctamente.**" + Style.RESET_ALL)
 
 
-
-
-
 def process_data(data_queue, stop_event, total_capture_time, original_rate, decimation_factor, sensor_numbers, sqlite_db_path, config, buffer_size):
     """
     Procesa los datos capturados y los envía a la base de datos SQLite como buffer.
     """
     persistent_buffer = []
     packet_count = 0
+    queue_time = 0
     decimated_rate = original_rate // decimation_factor
     interval = 1 / decimated_rate
     last_timestamp = None
@@ -372,63 +370,74 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
             break
 
         try:
-            packet_start_time = time.time()
-            if config["debug"]:
-                print(Fore.GREEN + f"------------------NEW PACKAGE--------------------"+ Style.RESET_ALL)
-                print(f"1) Tiempo real inicial {packet_start_time}.")
-            raw_data = data_queue.get(True, 2)
-            packet_count += 1
-            data = raw_data[:, ::decimation_factor]
+            while not data_queue.empty():
+                packet_start_time = time.time()
+                if config["debug"]:
+                    print(Fore.GREEN + f"------------------NEW PACKAGE--------------------"+ Style.RESET_ALL)
+                    print(f"1) Tiempo real inicial {packet_start_time}.")
+                try:
+                    raw_data = data_queue.get_nowait()
+                except queue.Empty:
+                    break
+                packet_count += 1
+                data = raw_data[:, ::decimation_factor]
 
-            if config["debug"]:
-                print(f"2) Shape {data.shape} procesado.")
-                if data_queue.qsize() > 0:
-                    print(Fore.RED + f"3) Tamaño actual de data_queue: {data_queue.qsize()}"+ Style.RESET_ALL)
+                if config["debug"]:
+                    print(f"2) Shape {data.shape} procesado. - {time.time()}")
+                    if data_queue.qsize() > 0:
+                        print(Fore.RED + f"3) Tamaño actual de data_queue: {data_queue.qsize()}"+ Style.RESET_ALL)
+                    else:
+                        print(Fore.GREEN + f"3) Tamaño actual de data_queue: {data_queue.qsize()}"+ Style.RESET_ALL)
+
+                if last_timestamp is None:
+                    timestamps = [packet_start_time + i * interval for i in range(len(data[0]))]
                 else:
-                    print(Fore.GREEN + f"3) Tamaño actual de data_queue: {data_queue.qsize()}"+ Style.RESET_ALL)
+                    expected_first_timestamp = last_timestamp + interval
+                    timestamps = [expected_first_timestamp + i * interval for i in range(len(data[0]))]
 
-            if last_timestamp is None:
-                timestamps = [packet_start_time + i * interval for i in range(len(data[0]))]
-            else:
-                expected_first_timestamp = last_timestamp + interval
-                timestamps = [expected_first_timestamp + i * interval for i in range(len(data[0]))]
+                last_timestamp = timestamps[-1]
 
-            last_timestamp = timestamps[-1]
+                df = DataFrame(data.transpose(), index=timestamps, columns=[f'{i}' for i in sensor_numbers])
+                df.reset_index(inplace=True)
+                df.rename(columns={'index': 'time'}, inplace=True)
 
-            df = DataFrame(data.transpose(), index=timestamps, columns=[f'{i}' for i in sensor_numbers])
-            df.reset_index(inplace=True)
-            df.rename(columns={'index': 'time'}, inplace=True)
+                if config["debug"]:
+                    print(f"4) Paquete número {packet_count} procesado.")
+                    print(f"5) Timestamps para el paquete {packet_count}: desde {timestamps[0]} hasta {timestamps[-1]}")
 
-            if config["debug"]:
-                print(f"4) Paquete número {packet_count} procesado.")
-                print(f"5) Timestamps para el paquete {packet_count}: desde {timestamps[0]} hasta {timestamps[-1]}")
+                persistent_buffer.extend(df.to_dict(orient='records'))
 
-            persistent_buffer.extend(df.to_dict(orient='records'))
+                # Agrupar los datos antes de enviarlos a SQLite3 para evitar múltiples inserciones pequeñas
+                if len(persistent_buffer) >= buffer_size/decimation_factor:
+                    buffer_to_db(persistent_buffer, sqlite_db_path, config)  # Usar SQLite3 como buffer
+                    persistent_buffer = []
 
-            # Agrupar los datos antes de enviarlos a SQLite3 para evitar múltiples inserciones pequeñas
-            if len(persistent_buffer) >= buffer_size:
-                buffer_to_db(persistent_buffer, sqlite_db_path, config)  # Usar SQLite3 como buffer
-                persistent_buffer = []
+                real_time_now = time.time()
+                if config["debug"]:
+                    print(f"6) Tiempo real final {real_time_now} y tiempo real {(real_time_now - packet_start_time)}.")
 
-            real_time_now = time.time()
-            if config["debug"]:
-                print(f"6) Tiempo real final {real_time_now} y tiempo real {(real_time_now - packet_start_time)}.")
+                # Calcular el tiempo de espera necesario
+                waiting_time = (last_timestamp - timestamps[0] + interval - (real_time_now - packet_start_time)) #
+                if config["debug"]:
+                    print(f"7) Tiempo de espera necesario: {waiting_time:.5f} segundos.")
+                    print(f"8) Tiempo de proceso hasta ahora: {real_time_now - packet_start_time} segundos.")
+                    print(f"9) Tiempo total entre paquetes: {waiting_time + (real_time_now - packet_start_time)} segundos.")
 
-            # Calcular el tiempo de espera necesario
-            waiting_time = (last_timestamp - timestamps[0] + interval - (real_time_now - packet_start_time)) #
-            if config["debug"]:
-                print(f"7) Tiempo de espera necesario: {waiting_time:.5f} segundos.")
-                print(f"8) Tiempo de proceso hasta ahora: {real_time_now - packet_start_time} segundos.")
-                print(f"9) Tiempo total entre paquetes: {waiting_time + (real_time_now - packet_start_time)} segundos.")
+                # Dormir solo si el tiempo de espera es positivo
+                if waiting_time > 0 :
+                    if data_queue.qsize() > 0:
+                        time.sleep(0.01)
+                        queue_time += abs(real_time_now - packet_start_time)
+                    else:
+                        time.sleep(abs(waiting_time) + abs(queue_time))
+                        queue_time = 0    
+                        
+                real_time_now = time.time()
+                time_difference = (real_time_now - last_timestamp - interval) # Diferencia de tiempo real
+                if config["debug"]:
+                    print(f"10) Diferencia de tiempo real: {time_difference:.5f} segundos. RETRASO (+), ADELANTO (-).")
 
-            # Dormir solo si el tiempo de espera es positivo
-            if waiting_time > 0:
-                time.sleep(waiting_time)
-
-            real_time_now = time.time()
-            time_difference = (real_time_now - last_timestamp - interval) # Diferencia de tiempo real
-            if config["debug"]:
-                print(f"10) Diferencia de tiempo real: {time_difference:.5f} segundos. RETRASO POR PROCESAMIENTO.")
+            time.sleep(0.01)    
                 
         except queue.Empty:
             continue
@@ -450,15 +459,13 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
     Captura los datos del DAQ y los coloca en la cola de procesamiento, ajustando los datos
     para que coincidan con la frecuencia de adquisición y el tamaño del buffer.
     """
-    import time
-    import numpy as np
 
     start_time = time.time()
     number_of_sensors = len(all_sensor_numbers)
     preserve_row = [i in sensor_numbers for i in all_sensor_numbers]
+    persistent_buffer_capture = []  # Buffer para datos excedentes
 
     # Calcular datos esperados por segundo
-    expected_samples_per_second = original_rate
     total_expected_samples = int(original_rate * 1)  # Muestras esperadas en 1 segundo
 
     with Task() as task:
@@ -481,7 +488,6 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
             samps_per_chan=buffer_size
         )
 
-        data_accumulated = []  # Acumular datos para verificar cantidad por segundo
         last_time = start_time
 
         while not stop_event.is_set():
@@ -494,38 +500,40 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
 
             try:
                 # Leer datos del DAQ
-                data = np.array(task.read(number_of_samples_per_channel=buffer_size)) * sensitivity
+                data = array(task.read(number_of_samples_per_channel=buffer_size))
                 data = data[preserve_row, :]  # Filtrar sensores seleccionados
-                data_accumulated.append(data)
+                
+                # Combinar datos persistentes con nuevos datos
+                if persistent_buffer_capture:
+                    data = concatenate([persistent_buffer_capture, data], axis=1)
 
-                # Verificar si ha pasado un segundo
-                if current_time - last_time >= 1.0:
-                    # Concatenar datos acumulados
-                    all_data = np.concatenate(data_accumulated, axis=1)
-                    data_accumulated = []  # Limpiar datos acumulados
-
-                    # Contar cantidad de datos capturados
-                    samples_captured = all_data.shape[1]  # Cantidad de columnas (tiempo)
-
-                    if samples_captured != total_expected_samples:
-                        decimation_factor = max(1, samples_captured // total_expected_samples)
-                        all_data = all_data[:, ::decimation_factor]
-                        if config["debug"]:
-                            print(f"1.1) CAPTURA Decimación aplicada. Factor: {decimation_factor}")
-
-                    # Colocar datos en la cola
-                    data_queue.put(all_data)
-                    last_time = current_time  # Actualizar tiempo del último paquete
+                # Verificar si tenemos suficientes datos para un paquete completo
+                if data.shape[1] >= total_expected_samples:
+                    # Extraer un paquete completo
+                    full_data = data[:, :total_expected_samples]
+                    
+                    # Guardar datos restantes en el buffer persistente
+                    persistent_buffer_capture = data[:, total_expected_samples:]
+                    
+                    # Enviar paquete a la cola
+                    data_queue.put(full_data)
 
                     if config["debug"]:
-                        print(f"1.2) CAPTURA Paquete colocado. Capturados: {samples_captured}, Esperados: {total_expected_samples}")
-                        print(f"1.3) CAPTURA Tiempo actual: {current_time:.2f}s")
+                        print(f"Paquete completo enviado: {full_data.shape}, Datos restantes: {persistent_buffer_capture.shape}, Tiempo de paquete: {current_time - last_time}")
+                    desfase = current_time - last_time    
+                    last_time = current_time  # Actualizar tiempo del último paquete
+                else:
+                    # Si no hay suficientes datos para un paquete, guardar todo en el buffer persistente
+                    persistent_buffer_capture = data
 
-                time.sleep(0.01)  # Pausa para evitar uso excesivo de CPU
+                    if config["debug"]:
+                        print(f"Datos acumulados en buffer: {persistent_buffer_capture.shape}")
+
+                time.sleep(min(0, abs(2 * (1 - desfase))))  # Pausa para evitar uso excesivo de CPU
+                print(f"tiempo espera : {1 - desfase}")
 
             except Exception as e:
-                print(f"[ERROR] Error al capturar datos: {e}")
-
+                print(f"[ERROR] Error al capturar datos: {e}")    
 
 
 
