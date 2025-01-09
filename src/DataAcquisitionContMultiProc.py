@@ -15,6 +15,7 @@ from pandas import DataFrame
 from numpy import array, concatenate
 from pymongo import MongoClient, errors
 from sqlite3 import connect
+from scipy.signal import decimate  # Importar la función de decimación de SciPy
 import time
 from os import stat, mkdir
 from multiprocessing import Process, Queue, Event
@@ -380,7 +381,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
                 except queue.Empty:
                     break
                 packet_count += 1
-                data = raw_data[:, ::decimation_factor]
+                data = array([decimate(channel, decimation_factor, zero_phase=True) for channel in raw_data])
 
                 if config["debug"]:
                     print(f"2) Shape {data.shape} procesado. - {time.time()}")
@@ -529,7 +530,7 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
                     if config["debug"]:
                         print(f"Datos acumulados en buffer: {persistent_buffer_capture.shape}")
 
-                time.sleep(min(0, abs(2 * (1 - desfase))))  # Pausa para evitar uso excesivo de CPU
+                time.sleep(min(0, abs(5 * (1 - desfase))))  # Pausa para evitar uso excesivo de CPU
                 print(f"tiempo espera : {1 - desfase}")
 
             except Exception as e:
