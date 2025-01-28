@@ -65,8 +65,6 @@ def get_sensor_numbers(config):
     if exist_unused_ch:
         for i in unused_ch:
             sensor_numbers.remove(i)
-    print(sensor_numbers)
-    print(sensor_numbers_all)
     return sensor_numbers, sensor_numbers_all
 
 

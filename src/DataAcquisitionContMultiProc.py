@@ -530,7 +530,8 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
                         print(f"Datos acumulados en buffer: {persistent_buffer_capture.shape}")
 
                 time.sleep(min(0, abs(2 * (1 - desfase))))  # Pausa para evitar uso excesivo de CPU
-                print(f"tiempo espera : {1 - desfase}")
+                if config["debug"]:
+                    print(f"tiempo espera : {1 - desfase}")
 
             except Exception as e:
                 print(f"[ERROR] Error al capturar datos: {e}")    
