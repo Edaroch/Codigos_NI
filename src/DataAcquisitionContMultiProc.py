@@ -1,13 +1,11 @@
 """ 
-Codigo para capturar datos de N sensores de aceleración utilizando un dispositivo NI cDAQ9185 con módulos NI 9230.
-
-El código captura datos de aceleración de N sensores en un intervalo de tiempo especificado y los guarda en un buffer definido por el usuario de acuerdo a la capacidad del DAQ 
-y lo vuelca en una base de datos MongoDB y su respectivo timestamp UNIX. 
-El código también permite detener la captura de datos manualmente presionando ENTER.
-Utiliza multiprocessing para captura y procesamiento de datos en paralelo. 
-El procesamiento de los datos no solo decima los datos sino que también los redondea a 5 decimales y agrega el timestamp UNIX.
+Code to capture data from N acceleration sensors using an NI cDAQ9185 device with NI 9230 modules.
+The code captures acceleration data from N sensors over a specified time interval and stores it in a user-defined buffer according to the DAQ's capacity.
+It then transfers the data to a MongoDB database along with its corresponding UNIX timestamp.
+The code also allows manual data capture stopping by pressing ENTER.
+It uses multiprocessing for parallel data capture and processing.
+Data processing not only decimates the data but also rounds it to 5 decimal places and adds the UNIX timestamp.
 Python 3.10.9
-
 """
 from nidaqmx import Task
 from nidaqmx.constants import AcquisitionType, AccelUnits, AccelSensitivityUnits
@@ -45,7 +43,7 @@ def initialize_mongodb_client(db_config):
     return mongo_client
 
 def close_mongodb_client():
-    """Cierra el cliente MongoDB si está abierto."""
+    """Closes the MongoDB client if it is open."""
     global mongo_client
     if mongo_client is not None:
         mongo_client.close()
@@ -53,7 +51,7 @@ def close_mongodb_client():
 
 def buffer_to_db(persistent_buffer, sqlite_db_path, config, max_retries=5, initial_delay=0.5):
     """
-    Inserta datos en la base de datos SQLite3.
+    Inserts data into the SQLite3 database.
     """
     attempt = 0
     delay = initial_delay
@@ -71,7 +69,7 @@ def buffer_to_db(persistent_buffer, sqlite_db_path, config, max_retries=5, initi
             df = DataFrame(persistent_buffer)
 
             if config["debug"]:
-                print(f"5) Datos pasando por la base de datos: {len(df)} registros por sensor.")
+                print(f"5) Data passing through the database: {len(df)} records per sensor.")
 
             # Obtener timestamps únicos e insertar en `timestamps`
             timestamps = df['time'].unique()
@@ -112,18 +110,18 @@ def buffer_to_db(persistent_buffer, sqlite_db_path, config, max_retries=5, initi
             persistent_buffer.clear()
 
             if config["debug"]:
-                print(f"6) Buffer a SQLite3 exitoso. {len(sensor_data)} aceleraciones insertadas.")
+                print(f"6) Buffer to SQLite3 successful. {len(sensor_data)} accelerations inserted.")
             break
 
         except Exception as e:
             print(f"Error: {e}")
             attempt += 1
             if attempt < max_retries:
-                print(f"Reintentando en {delay} segundos...")
+                print(f"Retrying in {delay} seconds...")
                 time.sleep(delay)
                 delay *= 2
             else:
-                print("Se alcanzó el máximo de intentos. No se pudieron guardar los datos.")
+                print("Maximum attempts reached. Data could not be saved.")
             break
 
         finally:
@@ -134,19 +132,19 @@ def buffer_to_db(persistent_buffer, sqlite_db_path, config, max_retries=5, initi
 
 def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_event, backup_time):
     """
-    Realiza el respaldo de todos los datos de la base de datos SQLite3 (buffer) a la base de datos MongoDB (raw).
-    Procesa en lotes basados en timestamps y elimina los datos correctamente.
+    Performs a backup of all data from the SQLite3 database (buffer) to the MongoDB (raw) database.
+    Processes data in batches based on timestamps and correctly deletes processed records.
     """
 
     if backup_time == 0:
         
-        print(Fore.RED + "El tiempo de respaldo es 0. No se realizarán respaldos a MongoDB." + Style.RESET_ALL)
+        print(Fore.RED + "The backup time is 0. No backups to MongoDB will be performed." + Style.RESET_ALL)
         return
 
     client = initialize_mongodb_client(db_config)  # Conexión a MongoDB
     if not client:
         config['backup_time'] = 0  # Disable backups if MongoDB is unavailable
-        print(Fore.RED + "MongoDB Server no se encuentra, los respaldos están desactivados." + Style.RESET_ALL)
+        print(Fore.RED + "MongoDB Server is unavailable, backups are disabled." + Style.RESET_ALL)
         return
 
     raw_collection = client[raw_db]['accelerations']
@@ -157,7 +155,7 @@ def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_
         start_time = time.time()  # Registrar el tiempo inicial para cada respaldo
 
         if config["debug"]:
-            print(Fore.GREEN + "----------------------------------------------Iniciando proceso de respaldo..." + Style.RESET_ALL)
+            print(Fore.GREEN + "----------------------------------------------Starting backup process..." + Style.RESET_ALL)
 
         try:
             # Conectar a la base de datos SQLite3 (buffer)
@@ -179,7 +177,7 @@ def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_
             if all_timestamps:
                 total_timestamps = len(all_timestamps)
                 if config["debug"]:
-                    print(Fore.YELLOW + f"Se encontraron {total_timestamps} timestamps en SQLite3. Procesando en lotes de máximo {max_timestamps_per_batch} timestamps." + Style.RESET_ALL)
+                    print(Fore.YELLOW + f"Found {total_timestamps} timestamps in SQLite3. Processing in batches of up to {max_timestamps_per_batch} timestamps." + Style.RESET_ALL)
 
                 total_backed_up = 0
                 delete_in_progress = True  # Marcar que la eliminación está en progreso
@@ -240,16 +238,16 @@ def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_
                     total_backed_up += len(timestamp_batch)
 
                     if config["debug"]:
-                        print(Fore.CYAN + f"Respaldo de lote completado ({len(timestamp_batch)} timestamps procesados)." + Style.RESET_ALL)
+                        print(Fore.CYAN + f"Batch backup completed ({len(timestamp_batch)} timestamps processed)." + Style.RESET_ALL)
 
                 delete_in_progress = False  # Marcar que la eliminación ha sido completada
 
                 if config["debug"]:
-                    print(Fore.YELLOW + f"Respaldo completado. {total_backed_up} timestamps transferidos en {time.time() - start_time:.5f} segundos." + Style.RESET_ALL)
+                    print(Fore.YELLOW + f"Backup completed. {total_backed_up} timestamps transferred in {time.time() - start_time:.5f} seconds." + Style.RESET_ALL)
 
             else:
                 if config["debug"]:
-                    print(Fore.GREEN + "No hay datos nuevos en la base de datos buffer para respaldar." + Style.RESET_ALL)
+                    print(Fore.GREEN + "No new data in the buffer database to back up." + Style.RESET_ALL)
 
             # Calcular el tiempo restante y ajustarlo para asegurar que el ciclo toma el tiempo exacto.
             process_duration = time.time() - start_time
@@ -257,14 +255,14 @@ def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_
             time.sleep(remaining_time)
 
         except Exception as e:
-            print(Fore.RED + f"Error durante el respaldo de datos: {e}" + Style.RESET_ALL)
+            print(Fore.RED + f"Error during data backup: {e}" + Style.RESET_ALL)
 
         finally:
             conn.close()  # Cerrar la conexión a SQLite3
 
     # Si se ha activado el evento de parada, asegurarse de que el proceso de respaldo finalice correctamente
     if stop_event.is_set() and delete_in_progress:
-        print(Fore.YELLOW + "Detención solicitada, completando respaldo en curso..." + Style.RESET_ALL)
+        print(Fore.YELLOW + "Stop requested, completing ongoing backup..." + Style.RESET_ALL)
         try:
             conn = connect(sqlite_db_path)
             cursor = conn.cursor()
@@ -339,21 +337,21 @@ def backup_data(db_config, sqlite_db_path, raw_db, config, sensor_numbers, stop_
                 """)
                 timestamp_batch = cursor.fetchall()
 
-            print(Fore.GREEN + "Respaldo final completado. Buffer eliminado por completo." + Style.RESET_ALL)
+            print(Fore.GREEN + "Final backup completed. Buffer completely cleared." + Style.RESET_ALL)
 
         except Exception as e:
-            print(Fore.RED + f"Error durante el respaldo final de datos: {e}" + Style.RESET_ALL)
+            print(Fore.RED + f"Error during data backup: {e}" + Style.RESET_ALL)
 
         finally:
             conn.close()
 
     close_mongodb_client()
-    print(Fore.RED + "**El proceso de respaldo ha sido detenido correctamente.**" + Style.RESET_ALL)
+    print(Fore.RED + "**The backup process has been stopped successfully.**" + Style.RESET_ALL)
 
 
 def process_data(data_queue, stop_event, total_capture_time, original_rate, decimation_factor, sensor_numbers, sqlite_db_path, config, buffer_size):
     """
-    Procesa los datos capturados y los envía a la base de datos SQLite como buffer.
+    Processes captured data and sends it to the SQLite database as a buffer.
     """
     persistent_buffer = []
     packet_count = 0
@@ -364,7 +362,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
 
     # Verificar que config sea un diccionario
     if not isinstance(config, dict):
-        raise ValueError("El argumento 'config' debe ser un diccionario.")
+        raise ValueError("The argue 'config' must be a dictionary.")
 
     while not stop_event.is_set():
         if total_capture_time > 0 and packet_count >= total_capture_time:
@@ -375,7 +373,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
                 packet_start_time = time.time()
                 if config["debug"]:
                     print(Fore.GREEN + f"------------------NEW PACKAGE--------------------"+ Style.RESET_ALL)
-                    print(f"1) Tiempo real inicial {packet_start_time}.")
+                    print(f"1) Initial real-time {packet_start_time}.")
                 try:
                     raw_data = data_queue.get_nowait()
                 except queue.Empty:
@@ -384,11 +382,11 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
                 data = array([decimate(channel, decimation_factor, zero_phase=True) for channel in raw_data])
 
                 if config["debug"]:
-                    print(f"2) Shape {data.shape} procesado. - {time.time()}")
+                    print(f"2) Shape {data.shape} processed. - {time.time()}")
                     if data_queue.qsize() > 0:
-                        print(Fore.RED + f"3) Tamaño actual de data_queue: {data_queue.qsize()}"+ Style.RESET_ALL)
+                        print(Fore.RED + f"3) Current size of data_queue {data_queue.qsize()}"+ Style.RESET_ALL)
                     else:
-                        print(Fore.GREEN + f"3) Tamaño actual de data_queue: {data_queue.qsize()}"+ Style.RESET_ALL)
+                        print(Fore.GREEN + f"3) Current size of data_queue {data_queue.qsize()}"+ Style.RESET_ALL)
 
                 if last_timestamp is None:
                     timestamps = [packet_start_time + i * interval for i in range(len(data[0]))]
@@ -403,8 +401,8 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
                 df.rename(columns={'index': 'time'}, inplace=True)
 
                 if config["debug"]:
-                    print(f"4) Paquete número {packet_count} procesado.")
-                    print(f"5) Timestamps para el paquete {packet_count}: desde {timestamps[0]} hasta {timestamps[-1]}")
+                    print(f"4) Packet number {packet_count} processed.")
+                    print(f"5) Timestamps for packet {packet_count}: from {timestamps[0]} to {timestamps[-1]}")
 
                 persistent_buffer.extend(df.to_dict(orient='records'))
 
@@ -415,14 +413,14 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
 
                 real_time_now = time.time()
                 if config["debug"]:
-                    print(f"6) Tiempo real final {real_time_now} y tiempo real {(real_time_now - packet_start_time)}.")
+                    print(f"6) Final real-time {real_time_now} and real-time duration {(real_time_now - packet_start_time)}.")
 
                 # Calcular el tiempo de espera necesario
                 waiting_time = (last_timestamp - timestamps[0] + interval - (real_time_now - packet_start_time)) #
                 if config["debug"]:
-                    print(f"7) Tiempo de espera necesario: {waiting_time:.5f} segundos.")
-                    print(f"8) Tiempo de proceso hasta ahora: {real_time_now - packet_start_time} segundos.")
-                    print(f"9) Tiempo total entre paquetes: {waiting_time + (real_time_now - packet_start_time)} segundos.")
+                    print(f"7) Required waiting time: {waiting_time:.5f} seconds.")
+                    print(f"8) Processing time so far: {real_time_now - packet_start_time} seconds.")
+                    print(f"9) Total time between packets: {waiting_time + (real_time_now - packet_start_time)} seconds.")
 
                 # Dormir solo si el tiempo de espera es positivo
                 if waiting_time > 0 :
@@ -436,7 +434,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
                 real_time_now = time.time()
                 time_difference = (real_time_now - last_timestamp - interval) # Diferencia de tiempo real
                 if config["debug"]:
-                    print(f"10) Diferencia de tiempo real: {time_difference:.5f} segundos. RETRASO (+), ADELANTO (-).")
+                    print(f"10) Real-time difference: {time_difference:.5f} seconds. DELAY (+), ADVANCE (-).")
 
             time.sleep(0.01)    
                 
@@ -447,9 +445,9 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
         buffer_to_db(persistent_buffer, sqlite_db_path, config)  # Usar SQLite3 como buffer
 
     if total_capture_time == 0:
-        print(Fore.GREEN + "Captura continua. Presiona ENTER para terminar."+ Style.RESET_ALL)
+        print(Fore.GREEN + "Continuous capture. Press ENTER to stop."+ Style.RESET_ALL)
     else:
-        print(Fore.RED + "CAPTURA DE DATOS COMPLETADA. Presiona ENTER para terminar."+ Style.RESET_ALL)
+        print(Fore.RED + "DATA CAPTURE COMPLETED. Press ENTER to finnish."+ Style.RESET_ALL)
 
     stop_event.set()
 
@@ -457,8 +455,8 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
 def capture_data(data_queue, stop_event, deviceName, total_capture_time, original_rate, min_val,
                  max_val, sensitivity, buffer_size, sensor_numbers, all_sensor_numbers, config):
     """
-    Captura los datos del DAQ y los coloca en la cola de procesamiento, ajustando los datos
-    para que coincidan con la frecuencia de adquisición y el tamaño del buffer.
+    Captures data from the DAQ and places it in the processing queue, adjusting the data
+    to match the acquisition frequency and buffer size.
     """
 
     start_time = time.time()
@@ -520,7 +518,7 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
                     data_queue.put(full_data)
 
                     if config["debug"]:
-                        print(f"Paquete completo enviado: {full_data.shape}, Datos restantes: {persistent_buffer_capture.shape}, Tiempo de paquete: {current_time - last_time}")
+                        print(f"Complete packet sent: {full_data.shape}, Remaining data: {persistent_buffer_capture.shape}, Packet time: {current_time - last_time}")
                     desfase = current_time - last_time    
                     last_time = current_time  # Actualizar tiempo del último paquete
                 else:
@@ -528,13 +526,13 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
                     persistent_buffer_capture = data
 
                     if config["debug"]:
-                        print(f"Datos acumulados en buffer: {persistent_buffer_capture.shape}")
+                        print(f"Remaining data in the buffer: {persistent_buffer_capture.shape}")
 
                 time.sleep(min(0, abs(5 * (1 - desfase))))  # Pausa para evitar uso excesivo de CPU
-                print(f"tiempo espera : {1 - desfase}")
+                print(f"Waiting time: {1 - desfase}")
 
             except Exception as e:
-                print(f"[ERROR] Error al capturar datos: {e}")    
+                print(f"[ERROR] Error capturing data: {e}")    
 
 
 
@@ -543,7 +541,7 @@ def run_data_acquisition(deviceName, total_capture_time, original_rate, decimati
                          sensor_numbers_all, sqlite_db_path, db_config, config, 
                          backup_time, restart_time_in_seconds, stop_event):
     """
-    Función principal para iniciar la adquisición de datos con la configuración establecida.
+    Main function to start data acquisition with the configured settings.
     """
     start_time = time.time()
     data_queue = Queue()
@@ -573,10 +571,10 @@ def run_data_acquisition(deviceName, total_capture_time, original_rate, decimati
     backup_process.start()
 
     if restart_time_in_seconds > 0:
-        print(f"Esperando {restart_time_in_seconds} segundos para reiniciar la toma de datos o presionar ENTER para detener.")
+        print(f"Waiting {restart_time_in_seconds} seconds to restart data acquisition or press ENTER to stop.")
         stop_event.wait(timeout=restart_time_in_seconds)  # Detener tras el tiempo de reinicio o por ENTER
     else:
-        input("Presiona ENTER para detener.")  # Si el restart_time es 0, esperar manualmente por ENTER
+        input("Press ENTER to stop.")  # Si el restart_time es 0, esperar manualmente por ENTER
 
     stop_event.set()  # Detener todos los procesos
 
@@ -593,7 +591,7 @@ def run_data_acquisition(deviceName, total_capture_time, original_rate, decimati
         backup_process.terminate()
         close_mongodb_client()  # Cerrar el cliente MongoDB
     end_time = time.time()
-    print(f"Todos los procesos han finalizado. {end_time}, tiempo total {end_time - start_time}.")
+    print(f"All processes have finished. {end_time}, total time {end_time - start_time}.")
 
 
 if __name__ == "__main__":

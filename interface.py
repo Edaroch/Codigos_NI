@@ -87,36 +87,36 @@ class AcquisitionGUI:
 
         # Variables para organizar las secciones del archivo
         self.sections = {
-            "CONFIGURACION DE CAPTURA": ["total_capture_time", "backup_time", "restart_time", "debug"],
-            "CONFIGURACION DEL DAQ": [
+            "CAPTURE SETUP": ["total_capture_time", "backup_time", "restart_time", "debug"],
+            "DAQ SETUP": [
                 "deviceName", "original_rate", "buffer_size", "decimation_factor",
                 "daq_num_modules", "daq_ch_per_module", "unused_ch"
             ],
-            "CONFIGURACION DE LOS SENSORES": ["min_val", "max_val", "sensitivity"],
-            "CONFIGURACION BASES DE DATOS": ["db_path","sqlite_name", "db_host", "db_port", "db_backup_name"]
+            "SENSOR SETUP": ["min_val", "max_val", "sensitivity"],
+            "DATABASES SETUP": ["db_path","sqlite_name", "db_host", "db_port", "db_backup_name"]
         }
 
         # Explicaciones de las variables
         self.explanations = {
-            "deviceName": "Nombre del dispositivo de adquisición de datos. Ver en NI-MAX el nombre por ejemplo cDAQ9185-21DAXXX",
-            "total_capture_time": "Tiempo total de captura en segundos (0 para captura continua).",
-            "original_rate": "Frecuencia de muestreo original en Hz. Usar valores sobre 1000 para DAQ de NI y decimar",
-            "buffer_size": "Tamaño del buffer para la captura de datos. Esta información se va al DAQ si tomas datos a 200hz y tu buffer es de 400Hz, el DAQ enviara datos cada 2 segundos",
-            "decimation_factor": "Factor para reducir la frecuencia de muestreo.",
-            "min_val": "Valor mínimo esperado en las mediciones (sensor). Ver ficha tecnica del sensor.",
-            "max_val": "Valor máximo esperado en las mediciones (sensor).Ver ficha tecnica del sensor.",
-            "sensitivity": "Sensibilidad del sensor. Ver ficha tecnica del sensor.",
-            "daq_num_modules": "Número de módulos conectados al DAQ. Los modulos deben ir en conectados al DAQ en orden ascendente.",
-            "daq_ch_per_module": "Número de canales por módulo.",
-            "unused_ch": "Canales no utilizados. Usar nan para todos los sensores. Números de dos cifras separados por comas (ej: 20, 22) donde ij: i-> núm. módulo; j-> núm. channel",
-            "debug": "Activar modo de depuración (True/False).",
-            "db_host": "Host de MongoDB.",
-            "db_port": "Puerto de MongoDB.",
-            "db_path": "Ruta de la base de datos SQLite.",
-            "sqlite_name": "Nombre de la base de datos SQLite. Cambiar nombre si se desea guardar en una nueva base de datos. Usar accelerations por defecto.",
-            "db_backup_name": "Nombre de la base de datos para almacenamiento histórico.",
-            "backup_time": "Tiempo en segundos para respaldo del buffer a la base de datos raw.",
-            "restart_time": "Ejemplo: '10s' cada diez segundos, '1h' para hora, '1d' para día."
+            "deviceName": "Name of the data acquisition device. Check in NI-MAX for the name, e.g., cDAQ9185-21DAXXX",
+            "total_capture_time": "Total capture time in seconds (0 for continuous capture).",
+            "original_rate": "Original sampling frequency in Hz. Use values above 1000 for NI DAQ and apply decimation.",
+            "buffer_size": "Buffer size for data capture. This information is sent to the DAQ. If you take data at 200Hz and your buffer is 400Hz, the DAQ will send data every 2 seconds.",
+            "decimation_factor": "Factor to reduce the sampling frequency.",
+            "min_val": "Minimum expected value in measurements (sensor). Check the sensor's technical datasheet.",
+            "max_val": "Maximum expected value in measurements (sensor). Check the sensor's technical datasheet.",
+            "sensitivity": "Sensor sensitivity. Check the sensor's technical datasheet.",
+            "daq_num_modules": "Number of modules connected to the DAQ. The modules must be connected to the DAQ in ascending order.",
+            "daq_ch_per_module": "Number of channels per module.",
+            "unused_ch": "Unused channels. Use NaN for all sensors. Two-digit numbers separated by commas (e.g., 20, 22), where ij: i -> module number; j -> channel number.",
+            "debug": "Enable debug mode (True/False).",
+            "db_host": "MongoDB host.",
+            "db_port": "MongoDB port.",
+            "db_path": "SQLite database path.",
+            "sqlite_name": "SQLite database name. Change the name if you want to save it in a new database. Use 'accelerations' by default.",
+            "db_backup_name": "Name of the database for historical storage.",
+            "backup_time": "Time in seconds to back up the buffer to the raw database.",
+            "restart_time": "Example: '10s' every ten seconds, '1h' for an hour, '1d' for a day."
         }
 
         # Variables de entrada de los parámetros
@@ -136,13 +136,13 @@ class AcquisitionGUI:
         self.console_output = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, width=200, height=15)
         self.console_output.pack(pady=10)
         self.update_console(
-'''INSTRUCCIONES: 
-- Modifica los valores por defecto si fuese necesario y presiona 'Actualizar Datos' para guardar la configuración. 
-- Luego presiona el botón 'Ejecutar' para iniciar el proceso de captura. 
-- Para detener la captura, accede a la consola, presiona ENTER y cierra manualmente la consola. 
-- Para capturas que no sean continuas, utiliza un tiempo de backup 0. Antes de reiniciar la captura, cambia el nombre de la base de datos para guardar en una nueva si asi lo deseas. 
-- Restart Time es el tiempo en segundos para reiniciar automáticamente la captura. Si se establece en 0s, no se reiniciará e irá acumulando un retraso de procesado de los datos. Este parámetro es útil para limpiar el buffer y dependerá de la capacidad del ordenador. Se recomienda 1 vez al dia. 
-- Recuerda guardar tu ultima configuracion al cerrar el programa si asi lo deseas. 
+'''INSTRUCTIONS:
+- Modify the default values if necessary and press 'Update Data' to save the configuration.
+- Then, press the 'Run' button to start the capture process.
+- To stop the capture, access the console, press ENTER, and manually close the console.
+- For non-continuous captures, use a backup time of 0. Before restarting the capture, change the database name if you want to save it in a new one.
+- Restart Time is the time in seconds to automatically restart the capture. If set to 0s, it will not restart and will accumulate a processing delay. This parameter is useful for clearing the buffer and will depend on the computer's capacity. It is recommended to set it once per day.
+- Remember to save your last configuration before closing the program if desired.
 '''
         )
 
@@ -158,38 +158,38 @@ class AcquisitionGUI:
         # Verificar si existe la base de datos
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path or not os.path.exists(db_path):
-            self.update_console("No se encontró la base de datos en la ruta especificada. Algunas funciones estarán deshabilitadas.")
+            self.update_console("Database not found at the specified path. Some functions will be disabled.")
 
 
         
     def backup_setup_file(self):
-        """Crea una copia de seguridad del archivo SETUP.txt"""
+        """Creates a backup of the SETUP.txt file"""
         try:
             shutil.copyfile('SETUP.txt', 'setupbak.txt')
             # print("Copia de seguridad de SETUP.txt creada.")
         except Exception as e:
-            print(f"Error al crear la copia de seguridad: {e}")
+            print(f"Error creating the backup: {e}")
 
     def restore_setup_file(self):
-        """Restaura el archivo SETUP.txt desde la copia de seguridad"""
+        """Restores the SETUP.txt file from the backup"""
         try:
             shutil.copyfile('setupbak.txt', 'SETUP.txt')
-            print("SETUP.txt restaurado desde la copia de seguridad.")
-            self.update_console("Archivo SETUP.txt restaurado a su estado original.")
+            print("SETUP.txt restored from backup.")
+            self.update_console("SETUP.txt file restored to its original state.")
         except Exception as e:
-            print(f"Error al restaurar SETUP.txt: {e}")
-            self.update_console(f"Error al restaurar SETUP.txt: {e}")
+            print(f"Error restoring SETUP.txt: {e}")
+            self.update_console(f"Error restoring SETUP.txt: {e}")
 
     def delete_backup_file(self):
-        """Elimina la copia de seguridad del archivo SETUP.txt"""
+        """Deletes the backup of the SETUP.txt file"""
         try:
             os.remove('setupbak.txt')
             # print("Copia de seguridad eliminada.")
         except Exception as e:
-            print(f"Error al eliminar la copia de seguridad: {e}")
+            print(f"Error deleting the backup: {e}")
 
     def create_scrollable_panel(self):
-        """Crea un panel desplazable para las configuraciones con un ancho fijo"""
+        """Creates a scrollable panel for configurations with a fixed width"""
         # Establecer el ancho fijo que deseas para el canvas
         fixed_width = 350  # Por ejemplo, un ancho fijo de 300 píxeles
 
@@ -212,7 +212,7 @@ class AcquisitionGUI:
         self.create_setup_panel(scrollable_frame)
 
     def create_setup_panel(self, parent):
-        """Crea el contenido del panel de configuración con alineación adecuada."""
+        """Creates the configuration panel content with proper alignment."""
         for section, keys in self.sections.items():
             # Etiqueta del título de la sección (centrado)
             section_label = tk.Label(parent, text=section, font=("Helvetica", 12, "bold"))
@@ -243,7 +243,7 @@ class AcquisitionGUI:
             
 
     def create_plot_panel(self):
-        """Crea un panel para mostrar el gráfico y los checkboxes dinámicos."""
+        """Creates a panel to display the plot and dynamic checkboxes."""
         plot_frame = tk.Frame(self.root)
         plot_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
@@ -254,25 +254,25 @@ class AcquisitionGUI:
         # Checkbox para autoactualización
         self.auto_update_var = tk.IntVar()
         tk.Checkbutton(
-            button_frame, text="Actualización automática", variable=self.auto_update_var, command=self.toggle_auto_update
+            button_frame, text="Auto-update", variable=self.auto_update_var, command=self.toggle_auto_update
         ).pack(side=tk.LEFT, padx=5)
 
         # Botón para actualizar el gráfico manualmente
-        tk.Button(button_frame, text="Gráficar Una Vez", command=self.update_plot).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="Plot Once", command=self.update_plot).pack(side=tk.LEFT, padx=5)
 
         # Botón para consultar nuevamente la base de datos
-        tk.Button(button_frame, text="Buscar Sensores", command=self.update_sensor_checkboxes).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="Find Sensors", command=self.update_sensor_checkboxes).pack(side=tk.LEFT, padx=5)
 
         # Cuadro para mostrar el desfase de tiempo
-        self.time_lag_label = tk.Label(button_frame, text="Desfase: 0.00s", width=20, anchor="w", relief=tk.SUNKEN)
+        self.time_lag_label = tk.Label(button_frame, text="Time Lag: 0.00s", width=20, anchor="w", relief=tk.SUNKEN)
         self.time_lag_label.pack(side=tk.LEFT, padx=5)
 
         # Crear el gráfico inicial
         self.figure = plt.Figure(figsize=(10, 2), dpi=100)
         self.ax = self.figure.add_subplot(111)
-        self.ax.set_title('Últimos 20 segundos de datos registrados')
-        self.ax.set_xlabel('Tiempo')
-        self.ax.set_ylabel('Aceleración (m/s^2)')
+        self.ax.set_title('Last 20 seconds of recorded data')
+        self.ax.set_xlabel('Time')
+        self.ax.set_ylabel('Acceleration (m/s²)')
         self.ax.grid(True)
 
         # Contenedor para el gráfico
@@ -295,14 +295,14 @@ class AcquisitionGUI:
 
 
     def update_sensor_checkboxes(self):
-        """Actualiza los checkboxes para reflejar los sensores detectados en la base de datos."""
+        """Updates the checkboxes to reflect the sensors detected in the database."""
         # Guardar estados previos de los sensores
         previous_states = {sensor: var.get() for sensor, var in self.sensor_selection.items()}
 
         # Detectar ruta de la base de datos desde la configuración
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path or not os.path.exists(db_path):
-            self.update_console("Error: No se encontró la base de datos en la ruta especificada.")
+            self.update_console("Error: Database not found at the specified path.")
             self.disable_checkboxes()
             return
 
@@ -316,7 +316,7 @@ class AcquisitionGUI:
                 required_tables = {'sensors', 'accelerations', 'timestamps'}
 
                 if not required_tables.issubset(set(existing_tables)):
-                    self.update_console("Error: La base de datos no contiene las tablas necesarias.")
+                    self.update_console("Error: The database does not contain the necessary tables.")
                     self.disable_checkboxes()
                     return
 
@@ -331,7 +331,7 @@ class AcquisitionGUI:
                 sensor_numbers = sorted([row[0] for row in conn.execute(query).fetchall()])
 
             if not sensor_numbers:
-                self.update_console("No se detectaron sensores en los últimos 20 segundos.")
+                self.update_console("No sensors detected in the last 20 seconds.")
                 self.disable_checkboxes()
                 return
 
@@ -359,7 +359,7 @@ class AcquisitionGUI:
                 self.sensor_selection[sensor] = var
 
         except Exception as e:
-            self.update_console(f"Error al acceder a la base de datos: {e}")
+            self.update_console(f"Error loading data from the database: {e}")
             self.disable_checkboxes()
 
     def disable_checkboxes(self):
@@ -367,7 +367,7 @@ class AcquisitionGUI:
         self.sensor_selection.clear()
         for widget in self.checkbox_frame.winfo_children():
             widget.destroy()
-        tk.Label(self.checkbox_frame, text="No hay sensores disponibles").grid(row=0, column=0)
+        tk.Label(self.checkbox_frame, text="No Sensors currently available").grid(row=0, column=0)
 
 
 
@@ -378,7 +378,7 @@ class AcquisitionGUI:
         """
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path or not os.path.exists(db_path):
-            self.update_console("Error: No se encontró la base de datos en la ruta especificada.")
+            self.update_console("No database found at the specified path. Plot not updated.")
             return pd.DataFrame()
 
         # Obtener sensores seleccionados
@@ -415,20 +415,20 @@ class AcquisitionGUI:
 
     def update_plot(self):
         """
-        Actualiza el gráfico con los últimos 20 segundos de datos registrados.
+        Updates the plot with the last 20 seconds of recorded data.
         """
         # Verificar si hay una base de datos antes de actualizar el gráfico
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path or not os.path.exists(db_path):
-            self.update_console("No se encontró una base de datos en la ruta especificada. Gráfico no actualizado.")
+            self.update_console("No database found at the specified path. Plot not updated.")
             self.auto_update_var.set(0)  # Desactivar la actualización automática
             return
 
         df = self.load_last_20_seconds()
         self.ax.clear()
-        self.ax.set_title('Últimos 20 segundos de datos registrados')
-        self.ax.set_xlabel('Tiempo')
-        self.ax.set_ylabel('Aceleración (m/s^2)')
+        self.ax.set_title('Last 20 seconds of recorded data')
+        self.ax.set_xlabel('Time')
+        self.ax.set_ylabel('Acceleration (m/s²)')
         self.ax.grid(True)
 
         if not df.empty:
@@ -444,18 +444,18 @@ class AcquisitionGUI:
             time_lag = (current_time - (last_timestamp)).total_seconds()
 
             # Actualizar el cuadro de desfase
-            self.time_lag_label.config(text=f"Desfase: {time_lag:.2f}s")
+            self.time_lag_label.config(text=f"Time Lag: {time_lag:.2f}s")
 
         else:
             # Si no hay datos, establecer desfase a 0
-            self.time_lag_label.config(text="Desfase: 0.00s")
+            self.time_lag_label.config(text="Time Lag: 0.00s")
 
         self.canvas.draw()
 
 
 
     def toggle_auto_update(self):
-        """Activa o desactiva la autoactualización del gráfico."""
+        """Enables or disables auto-updating of the plot."""
         if self.auto_update_var.get():
             self.auto_update = True
             self.auto_update_plot()
@@ -463,7 +463,7 @@ class AcquisitionGUI:
             self.auto_update = False
 
     def auto_update_plot(self):
-        """Actualiza el gráfico automáticamente cada 2 segundos si está activado."""
+        """Automatically updates the plot every 2 seconds if enabled."""
         if self.auto_update:
             self.update_plot()
             self.root.after(1000, self.auto_update_plot)
@@ -473,13 +473,13 @@ class AcquisitionGUI:
         self.update_config()
 
         # Ejecutar main.py en un nuevo cmd
-        self.update_console("Ejecutando main.py en una nueva ventana de consola...")
+        self.update_console("Running main.py in a new console window...")
         if os.name == 'nt':  # Windows
             subprocess.Popen(['start', 'cmd', '/k', 'python', 'main.py'], shell=True)
         else:  # Linux, macOS
             subprocess.Popen(['x-terminal-emulator', '-e', 'python main.py'])
 
-        self.update_console("Proceso ejecutándose. Presiona ENTER en la consola para detener y luego cierra manualmente.")
+        self.update_console("Process running. Press ENTER in the console to stop and then manually close the console.")
 
 
 
@@ -491,18 +491,18 @@ class AcquisitionGUI:
 
     def on_closing(self):
         if self.is_updated:
-            if messagebox.askyesno("Guardar cambios", "¿Deseas guardar los cambios antes de salir?"):
+            if messagebox.askyesno("Save changes", "Do you want to save changes before exiting?"):
                 self.update_config()
             else:
                 self.restore_setup_file()
-                self.update_console("Cambios descartados. SETUP.txt restaurado.")
+                self.update_console("Changes discarded. SETUP.txt restored.")
         else:
-            self.update_console("No se realizaron cambios.")
+            self.update_console("No changes were made.")
         self.delete_backup_file()
         self.root.destroy()
 
     def update_config(self):
-        """Actualiza la configuración con los valores ingresados en los campos de texto."""
+        """Updates the configuration with values entered in the text fields."""
         for key, entry in self.entries.items():
             value = entry.get()
             # Convertir tipos numéricos si es necesario
@@ -519,17 +519,17 @@ class AcquisitionGUI:
 
         # Guardar los nuevos valores en el archivo SETUP.txt
         save_config(self.config)
-        self.update_console("Datos de configuración actualizados en SETUP.txt.")
+        self.update_console("Configuration data updated in SETUP.txt.")
 
     def create_control_buttons(self):
-        """Crea los botones de control"""
+        """Creates the control buttons."""
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=10)
 
-        execute_button = tk.Button(button_frame, text="Ejecutar", command=self.execute_main)
+        execute_button = tk.Button(button_frame, text="Run", command=self.execute_main)
         execute_button.grid(row=0, column=0, padx=10)
 
-        update_button = tk.Button(button_frame, text="Actualizar Datos", command=self.update_config)
+        update_button = tk.Button(button_frame, text="Update Data", command=self.update_config)
         update_button.grid(row=0, column=2, padx=10)
 
 if __name__ == "__main__":
