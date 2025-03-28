@@ -46,7 +46,7 @@ def main():
 
     def stop_acquisition():
         """Detiene la adquisición cuando el usuario presiona ENTER."""
-        input("Presiona ENTER para detener.")
+        input("PRESS ENTER TO STOP")
         stop_event.set()
         process_stop_event.set()
 
@@ -88,10 +88,10 @@ def main():
         # Si la adquisición se detuvo porque el restart_time expiró o se presionó ENTER
         elapsed_time = time.time() - start_time
         if not stop_event.is_set() and restart_time_in_seconds > 0 and elapsed_time >= restart_time_in_seconds:
-            print(f"Reiniciando adquisición después de {restart_time_in_seconds} segundos.")
+            print(f"Restarting the capture after {restart_time_in_seconds} seconds.")
             time.sleep(1)  # Espera un segundo antes de reiniciar
         else:
-            print("El proceso fue detenido manualmente. Terminando.")
+            print("All process were stopped manually.")
             break
 
     stop_thread.join()  # Asegurarse de que el hilo de entrada finalice correctamente
