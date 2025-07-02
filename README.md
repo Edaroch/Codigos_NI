@@ -1,6 +1,6 @@
 ## Project Description
 
-This project enables data acquisition from seismic sensors through a National Instruments (NI) DAQ system. Data is initially stored in an SQLite database as a buffer and then periodically transferred to a MongoDB database for long-term storage. This architecture provides robust and efficient data handling, supporting both real-time monitoring and historical data analysis. The configuration is managed via a flexible `SETUP.txt` file, allowing users to define acquisition parameters, buffer sizes, and backup intervals.
+This project enables real-time data acquisition from multiple seismic sensors using a National Instruments (NI) DAQ system (e.g., cDAQ9185 with NI 9230 modules). The system supports high-speed data capture, efficient buffering with SQLite, and scalable long-term storage in MongoDB. Configuration is handled via a flexible `SETUP.txt` file, and interaction is provided through two GUIs for acquisition and data checking/analysis (PSD and SVD).
 
 ---
 
@@ -9,152 +9,146 @@ This project enables data acquisition from seismic sensors through a National In
 ### Database Structure
 
 1. **SQLite (Buffer)**:
-   - Acts as a temporary storage for sensor data.
-   - Provides fast, local access for real-time data handling.
-   - Data is stored in three tables:
-     - `timestamps`: Records the timestamp of each data point.
-     - `sensors`: Contains metadata about sensors (e.g., sensor number).
-     - `accelerations`: Stores acceleration values linked to timestamps and sensors.
+   - Temporary local storage for high-speed sensor data.
+   - Fast access for real-time operations.
+   - Schema:
+     - `timestamps`: UNIX timestamps of each acquisition.
+     - `sensors`: Metadata (sensor numbers).
+     - `accelerations`: Acceleration values linked to timestamps and sensors.
 
-2. **MongoDB (Backup and Historical Storage)**:
-   - Stores processed data transferred from SQLite.
-   - Two collections:
-     - `sensors`: Metadata about sensors, similar to the SQLite `sensors` table.
-     - `accelerations`: Historical acceleration data with timestamps, optimized for long-term querying.
-   - Ensures scalability and allows integration with advanced analytical tools.
+2. **MongoDB (Historical Storage)**:
+   - Long-term archival of data backed up from SQLite.
+   - Schema:
+     - `sensors`: Metadata (like SQLite).
+     - `accelerations`: Documents grouped by timestamp.
 
 ---
 
 ## Installation and Setup
 
-1. Clone the repository to your local machine.
-2. Ensure the **NI-DAQmx** software (version `ni-daqmx_24.3`) is installed. During setup, select the option for hardware recognition.
-   - **Note**: If NI-DAQmx is not installed, install it before proceeding. You will be prompted during the setup process to confirm its installation.
-3. Navigate to the project directory and run `INSTALL.bat` to:
-   - Create a Python 3.10 virtual environment (`.venv`).
-   - Install required Python packages from `requirements.txt`.
-4. Verify and edit the configurations in `SETUP.txt` as needed.
+1. Clone the repository.
+2. Install **NI-DAQmx** (tested with version `ni-daqmx_24.3`). Enable hardware recognition.
+3. Run `INSTALL.bat` to:
+   - Create a Python 3.10 virtual environment.
+   - Install all Python dependencies via `requirements.txt`.
+4. Configure acquisition settings via `SETUP.txt`.
 
 ---
 
 ## Workflow
 
-1. **Data Acquisition**:
-   - Sensor data is captured via the NI DAQ system.
-   - The data is initially stored in SQLite as a buffer to ensure high-speed local operations.
+1. **Capture**:
+   - `main.py` coordinates parallel processes: DAQ capture, signal decimation, and data backup.
 
-2. **Buffer Management**:
-   - SQLite acts as a first-in, first-out (FIFO) buffer.
-   - Data in SQLite is periodically processed and transferred to MongoDB for long-term storage.
+2. **Buffering**:
+   - Data is stored in SQLite with WAL mode enabled.
+   - Reduces disk access while keeping quick access to recent data.
 
-3. **Backup to MongoDB**:
-   - A backup process transfers data from SQLite to MongoDB in manageable batches (e.g., 20,000 timestamps per batch).
-   - Once backed up, the corresponding data is deleted from SQLite to free up buffer space.
+3. **Backup**:
+   - Automatic periodic backup to MongoDB every `backup_time` seconds.
+   - Old SQLite records are removed post-backup to preserve space.
 
-4. **Configuration**:
-   - Users can customize acquisition intervals, buffer sizes, and backup intervals in `SETUP.txt`.
+4. **Visualization & Control**:
+   - `GUI.py`: Main GUI for editing config and launching acquisition.
+   - `GUI_check.py`: GUI for post-analysis using PSD and SVD computed from JSON.
 
 ---
 
 ## Folder Structure
 
-- **src/**: Contains the core Python modules for the project.
-- **MongoDB/**: Stores MongoDB configuration files and scripts.
+```
+<root>/
+├── main.py
+├── SETUP.txt
+├── INSTALL.bat / RUNGUI.bat / RUNMAIN.bat
+├── requirements.txt
+├── README.md
+├── src/
+│   ├── capture_data.py
+│   ├── data_acquisition.py
+│   ├── data_handling.py
+│   ├── process_data.py
+│   ├── setup_database.py
+│   ├── load_setup_data.py
+│   ├── utils.py
+│   └── GUI_check.py
+```
 
 ---
 
-## Files
-
-- **.gitattributes**: Ensures consistent line endings across operating systems.
-- **main.py**: Main script for data acquisition, buffer management, and backups.
-- **SETUP.txt**: Central configuration file for acquisition and database settings.
-- **interface.py**: Graphical User Interface (GUI) for managing configurations and running the system.
-- **INSTALL.bat**: Script for setting up the environment and dependencies.
-- **RUNGUI.bat**: Script to launch the GUI (`interface.py`).
-- **RUNMAIN.bat**: Script to run the main acquisition process (`main.py`).
-
----
-
-## Classes and Scripts
-
-- **DataAcquisitionContMultiProc.py**: Manages sensor data acquisition and real-time storage in SQLite.
-- **ChkPaths.py**: Ensures that required directories and database configurations exist as defined in `SETUP.txt`.
-- **LoadSetupData.py**: Loads and parses configuration settings from `SETUP.txt`.
-- **SetupDatabase.py**: Configures SQLite tables and MongoDB collections for efficient data handling.
-
----
-
-## Configuration
-
-The `SETUP.txt` file defines the project's behavior. Key parameters include:
+## Key Configuration Parameters (`SETUP.txt`)
 
 - **DAQ Settings**:
-  - `deviceName`: Name of the NI DAQ device.
-  - `original_rate`: Initial sampling rate from sensors (in Hz).
-  - `buffer_size`: Buffer size for each acquisition session.
-  - `decimation_factor`: Decimation factor to reduce the sampling rate.
-  - `daq_num_modules`: Number of nodules connecter to the DAQ, please use the bay in order, do not skip bays.
-  - `daq_ch_per_module`: Number of channels for module DAQ.
-  - `unused_ch`: 2 options: nan (all channels used) / two digits seppared by a comma (eg: 21, 22) where ij: i-> module number; j-> channel number starting by 0.
-- **Database Settings**:
-  - `db_host`: MongoDB host address.
-  - `db_port`: MongoDB port.
-  - `sqlite_db_path`: Path to the SQLite buffer database including the name of the database.
-  - `db_backup_name`: MongoDB database for long-term storage.
-  - `backup_time`: Interval (in seconds) for transferring data from SQLite to MongoDB, use 0 to disable the backup and store data only in SQLite3 database.
-- **Timing**:
-  - `total_capture_time`: Total duration for data capture (0 for continuous capture).
-  - `restart_time`: Interval for restarting the acquisition process (e.g., 0 for continuous, 10s for ten seconds, 1d for one day).
-- **Sensor Limits**:
-  - `min_val`: Minimum expected sensor reading.
-  - `max_val`: Maximum expected sensor reading.
-  - `sensitivity`: Sensibility if the seismic sensor.
+  - `deviceName`: NI DAQ name from NI-MAX.
+  - `original_rate`: Raw sampling rate (Hz).
+  - `buffer_size`: DAQ buffer (samples).
+  - `decimation_factor`: Downsampling factor.
+  - `daq_num_modules`: Number of NI-9230 modules.
+  - `daq_ch_per_module`: Channels per module (typically 3).
+  - `unused_ch`: e.g., `nan` or `21, 22`.
+
+- **Sensor Specs**:
+  - `min_val`, `max_val`: Expected signal range.
+  - `sensitivity`: Sensor sensitivity (e.g., 0.5 V/g).
+
+- **Database**:
+  - `db_path`, `sqlite_name`: Local SQLite buffer.
+  - `db_host`, `db_port`, `db_backup_name`: MongoDB settings.
+  - `backup_time`: Seconds between SQLite → MongoDB backups.
+
+- **Capture Logic**:
+  - `total_capture_time`: Duration (0 = infinite).
+  - `restart_time`: Restart interval (e.g., `10s`, `1h`, `0s`).
+  - `debug`: Enables verbose console output.
 
 ---
 
 ## Features
 
-1. **Real-Time Data Acquisition**:
-   - Captures data from seismic sensors via NI DAQ and stores it in SQLite for fast local access.
-2. **Efficient Backup Process**:
-   - Transfers buffered data from SQLite to MongoDB in batches, ensuring scalability for long-term storage.
-3. **Customizable Configuration**:
-   - Easily adjust acquisition intervals, buffer sizes, and backup frequencies through `SETUP.txt`.
-4. **Interactive GUI**:
-   - The `interface.py` script provides an easy-to-use interface for managing configurations and starting/stopping the system.
-5. **Robust Error Handling**:
-   - Automatically handles database connection issues and retries failed operations.
-6. **Modular Architecture**:
-   - Supports future scalability and integration with advanced analytics tools.
+- ✅ **Real-Time DAQ Integration**
+- ✅ **Configurable with GUI** (`GUI.py`)
+- ✅ **Modular Multiprocessing**
+- ✅ **Live SQLite Buffer + MongoDB Archive**
+- ✅ **Automated Backup Engine**
+- ✅ **PSD & SVD Analysis via `GUI_check.py`**
+- ✅ **Cross-platform (Windows/Linux, with Python 3.10)**
 
 ---
 
 ## Usage
 
-1. **Graphical Interface**:
-   - Run `RUNGUI.bat` to launch the GUI and manage configurations or start the acquisition process.
-2. **Command Line**:
-   - Execute `RUNMAIN.bat` to start the main acquisition process.
-3. **Stopping the Acquisition**:
-   - Press ENTER in the console running the acquisition process, then close the console manually.
+### 🖥️ GUI
+- Run `RUNGUI.bat` to launch config interface (`GUI.py`).
+- Press `Run` to launch `main.py` in a new console.
 
----
+### 🛠️ Command-line
+- Run `RUNMAIN.bat` to start the acquisition process directly.
 
-## Notes
-
-- If MongoDB is not installed or cannot connect, the system will skip the backup process and continue capturing data in SQLite.
-- Use `SETUP.txt` to configure the acquisition system before starting.
-- Ensure proper NI DAQ and MongoDB setups for optimal performance.
+### ⏹️ Stopping
+- Press ENTER in the acquisition console, then close it manually.
 
 ---
 
 ## Dependencies
 
-- **NI-MAX**: Required for configuring the NI hardware and ensuring proper DAQ operation.
-- **MongoDB**: Used for long-term data storage and historical analysis.
-- **SQLite**: Serves as a local buffer database for real-time data.
-- **Python Packages**:
-  - Install all dependencies using:
-    ```bash
-    pip install -r requirements.txt
-    ```
+- NI DAQmx (tested with `ni-daqmx_24.3`)
+- MongoDB (optional but recommended)
+- Python 3.10
+- Required packages:
+  ```bash
+  pip install -r requirements.txt
+  ```
+
+---
+
+## Notes
+
+- If MongoDB is unavailable, data remains in SQLite.
+- The `GUI_check.py` uses `psd_results.json` created by `utils.py` to visualize Power Spectral Densities and Singular Value Decompositions.
+- Designed for extensibility: supports additional analysis modules, REST API endpoints, and future web integration.
+
+---
+
+## Authors
+
+- Developed by Emilio Daroch (University of Granada, 2024–2025) for the **Hospital Real Seismic Monitoring System** as part of a cognitive SHM platform in the BUILDCHAIN project.
