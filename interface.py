@@ -9,8 +9,7 @@ import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from datetime import timedelta
-from LoadSetupData import load_config  # Importar load_config desde LoadSetupData.py
+from load_setup_data import load_config  # Importar load_config desde LoadSetupData.py
 
 
 # Función para guardar la configuración sin borrar comentarios ni agregar líneas en blanco
