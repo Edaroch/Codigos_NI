@@ -15,8 +15,6 @@ from process_data import process_data
 from data_handling import backup_data  # Importar la función para manejar el buffer y la base de datos
 from setup_database import close_mongodb_client
 
-
-
 def run_data_acquisition(deviceName, total_capture_time, original_rate, decimation_factor, 
                          min_val, max_val, sensitivity, buffer_size, sensor_numbers, 
                          sensor_numbers_all, sqlite_db_path, db_config, config, 

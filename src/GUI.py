@@ -73,16 +73,11 @@ class AcquisitionGUI:
         self.auto_update = False  # Flag para autoactualización
         self.main_process = None  # Almacena el proceso main.py
 
-
-
-
         # Realizar copia de seguridad del archivo SETUP.txt
         self.backup_setup_file()
 
         # Cargar la configuración actual de SETUP.txt
         self.config = load_config()
-
-
 
         # Variables para organizar las secciones del archivo
         self.sections = {
@@ -214,7 +209,7 @@ class AcquisitionGUI:
         """Creates the configuration panel content with proper alignment."""
         for section, keys in self.sections.items():
             # Etiqueta del título de la sección (centrado)
-            section_label = tk.Label(parent, text=section, font=("Helvetica", 12, "bold"))
+            section_label = tk.Label(parent, text=section, font=("Helvetica", 9, "bold"))
             section_label.pack(pady=5)
 
             # Marco para las filas dentro de la sección
@@ -287,11 +282,6 @@ class AcquisitionGUI:
 
         # Crear checkboxes dinámicos basados en los sensores detectados
         self.update_sensor_checkboxes()
-
-
-
-
-
 
     def update_sensor_checkboxes(self):
         """Updates the checkboxes to reflect the sensors detected in the database."""
@@ -367,8 +357,6 @@ class AcquisitionGUI:
         for widget in self.checkbox_frame.winfo_children():
             widget.destroy()
         tk.Label(self.checkbox_frame, text="No Sensors currently available").grid(row=0, column=0)
-
-
 
     def load_last_20_seconds(self):
         """
@@ -451,8 +439,6 @@ class AcquisitionGUI:
 
         self.canvas.draw()
 
-
-
     def toggle_auto_update(self):
         """Enables or disables auto-updating of the plot."""
         if self.auto_update_var.get():
@@ -520,6 +506,13 @@ class AcquisitionGUI:
         save_config(self.config)
         self.update_console("Configuration data updated in SETUP.txt.")
 
+    def open_check_gui(self):
+        script_path = os.path.join("src", "GUI_check.py")
+        self.update_console("Running GUI_Check in a new window...")
+        python_executable = sys.executable  # usa el mismo intérprete actual
+        subprocess.Popen([python_executable, script_path])
+
+
     def create_control_buttons(self):
         """Creates the control buttons."""
         button_frame = tk.Frame(self.root)
@@ -530,6 +523,9 @@ class AcquisitionGUI:
 
         update_button = tk.Button(button_frame, text="Update Data", command=self.update_config)
         update_button.grid(row=0, column=2, padx=10)
+
+        check_button = tk.Button(button_frame, text="Check Data", command=self.open_check_gui)
+        check_button.grid(row=0, column=4, padx=10)
 
 if __name__ == "__main__":
     root = tk.Tk()

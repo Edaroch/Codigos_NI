@@ -3,7 +3,7 @@ import numpy as np
 import scipy as sp
 import pandas as pd
 import matplotlib.pyplot as plt
-import warnings
+# import warnings
 from json import load, dump
 from sqlite3 import connect
 from typing import Tuple, Optional, List, Dict
@@ -171,8 +171,10 @@ def get_last_seconds_from_mongodb(seconds: int,
         if export_to_json:
             if output_file is None:
                 output_file = f"last_{seconds}_seconds.json"
-            with open(output_file, "w") as file:
+            temp_file = output_file + ".tmp"
+            with open(temp_file, "w") as file:
                 dump(results, file, indent=4)
+            os.replace(temp_file, output_file)
             print(f"✅ {len(results)} documents exported to '{os.path.abspath(output_file)}'")
 
         return results
@@ -242,11 +244,11 @@ def get_PSD_SVD_from_file(file_path: str = "last_seconds.json",
         df_old = float(df_target)
         nxseg = L
         df_target = sps / nxseg
-        warnings.warn(
-            f"Desired frequency resolution df={df_old:.2g}Hz is not achievable; "
-            f"setting df={df_target:.2g}Hz instead.",
-            UserWarning
-        )
+        # warnings.warn(
+        #     f"Desired frequency resolution df={df_old:.2g}Hz is not achievable; "
+        #     f"setting df={df_target:.2g}Hz instead.",
+        #     UserWarning
+        # )
 
     noverlap = int(pov * nxseg)
     PSD_matr = np.zeros((len(channels), len(channels), int(nxseg // 2 + 1)), dtype=complex)
@@ -265,7 +267,33 @@ def get_PSD_SVD_from_file(file_path: str = "last_seconds.json",
         U1_1 = U.T
         S_val[:, :, i] = np.diag(S)
 
-    print(f"✅ PSD + SVD computed for {len(channels)} channels.")
+    # print(f"✅ PSD + SVD computed for {len(channels)} channels.")
+
+    # Save results to JSON for GUI visualization
+    export = {
+        "frequencies": f.tolist(),
+        "psd": {
+            f"Sensor {i+1}": PSD_matr[i, i, :].real.tolist()
+            for i in range(len(channels))
+        },
+        "singular_values": {
+            f"Mode {i+1}": S_val[i, i, :].tolist()
+            for i in range(S_val.shape[0])
+        },
+        "metadata": {
+            "sampling_rate": sps,
+            "window": window,
+            "df_target": df_target,
+            "num_channels": len(channels),
+            "points": L
+        }
+    }
+
+    with open("psd_results.json", "w") as f_out:
+        dump(export, f_out, indent=4)
+
+    # print("📁 PSD + SVD results saved to 'psd_results.json'")
+
 
     # Plot if requested
     if plot:
@@ -290,5 +318,6 @@ def get_PSD_SVD_from_file(file_path: str = "last_seconds.json",
 
 if __name__ == "__main__":
     # get_last_seconds_from_sqlite(seconds=30)
-    get_last_seconds_from_mongodb(seconds=30)
-    get_PSD_SVD_from_file(plot=True)
+    # get_last_seconds_from_mongodb(seconds=30)
+    # get_PSD_SVD_from_file(plot=True)
+    pass
