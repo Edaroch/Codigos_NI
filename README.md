@@ -158,3 +158,13 @@ The `SETUP.txt` file defines the project's behavior. Key parameters include:
     ```bash
     pip install -r requirements.txt
     ```
+
+
+## Other aspects
+
+-> Simulating data with NI
+
+If no sensors available yet, they can be simulated with NI MAX. To do so:
+
+- Follow the instructions in: https://knowledge.ni.com/KnowledgeArticleDetails?id=kA03q000000x0PxCAI&l=es-ES
+- Introduce a compatible type of module. For instance, use NI 9230 simulated module
