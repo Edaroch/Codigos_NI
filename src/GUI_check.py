@@ -306,7 +306,7 @@ class CheckGUI:
         for label, values in sv.items():
             self.ax.plot(f, values, label=label)
 
-        self.ax.set_title("Singular Value Spectrum")
+        self.ax.set_title("Singular Value Decomposition")
         self.ax.set_xlabel("Frequency [Hz]")
         self.ax.set_ylabel("Singular Value")
         self.ax.grid(True)

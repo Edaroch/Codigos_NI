@@ -187,7 +187,7 @@ def get_last_seconds_from_mongodb(seconds: int,
 def get_PSD_SVD_from_file(file_path: str = "last_seconds.json",
                           window: str = 'hann',
                           pov: float = 0.5,
-                          df_target: float = 0.01,
+                          df_target: float = 0.1,
                           plot: bool = False,
                           psd_channels: Optional[List[int]] = None
                           ) -> Optional[Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]]:
@@ -277,7 +277,7 @@ def get_PSD_SVD_from_file(file_path: str = "last_seconds.json",
             for i in range(len(channels))
         },
         "singular_values": {
-            f"Mode {i+1}": S_val[i, i, :].tolist()
+            f"SV {i+1}": S_val[i, i, :].tolist()
             for i in range(S_val.shape[0])
         },
         "metadata": {
