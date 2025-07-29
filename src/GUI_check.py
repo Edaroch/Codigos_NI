@@ -4,16 +4,20 @@ import threading
 import time
 import json
 import os
-from utils import get_last_seconds_from_mongodb, get_PSD_SVD_from_file
+from utils import get_last_seconds_from_sqlite, get_PSD_SVD_from_file
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import numpy as np
+import queue
 
 
 class CheckGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Data Checking GUI")
+
+        self.plot_queue = queue.Queue()
+        self.root.after(100, self.process_plot_queue)
 
         # State
         self.auto_var = tk.BooleanVar()
@@ -24,6 +28,7 @@ class CheckGUI:
         self.mosaic_fig = None
         self.annotations = []
         self.log_scale_var = tk.BooleanVar(value=False)
+        self.mosaic_ready = False
 
 
         # Layout
@@ -78,6 +83,7 @@ class CheckGUI:
         self.checkbox_frame = ttk.LabelFrame(root, text="Sensor Selection (Overlay Only)")
 
         # Plot area
+
         self.plot_frame = ttk.Frame(root)
         self.plot_frame.pack(fill="both", expand=True)
 
@@ -87,21 +93,21 @@ class CheckGUI:
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas_widget = self.canvas.get_tk_widget()
         self.canvas_widget.pack(fill="both", expand=True)
-        self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
-        self.canvas._cid = self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
-        self.annotation = self.ax.annotate(
-            "", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
-            bbox=dict(boxstyle="round", fc="w"),
-            arrowprops=dict(arrowstyle="->"))
-        self.annotation.set_visible(False)
+        # self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
+        # self.canvas._cid = self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
+        # self.annotation = self.ax.annotate(
+        #     "", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
+        #     bbox=dict(boxstyle="round", fc="w"),
+        #     arrowprops=dict(arrowstyle="->"))
+        # self.annotation.set_visible(False)
 
-        self.vline = self.ax.axvline(color='gray', linestyle='--', linewidth=0.8)
-        self.vline.set_visible(False)
+        # self.vline = self.ax.axvline(color='gray', linestyle='--', linewidth=0.8)
+        # self.vline.set_visible(False)
 
         self.active_view = "overlay"
 
     def check_data(self):
-        get_last_seconds_from_mongodb(seconds=30)
+        get_last_seconds_from_sqlite(seconds=30)
         get_PSD_SVD_from_file()
         self.load_data()
         if self.auto_var.get():
@@ -116,15 +122,35 @@ class CheckGUI:
 
     def auto_loop(self):
         while self.running:
-            get_last_seconds_from_mongodb(seconds=30)
+            get_last_seconds_from_sqlite(seconds=30)
             get_PSD_SVD_from_file()
-            self.root.after(0, self.sync_gui_update_if_overlay)
-            time.sleep(2)
+            self.plot_queue.put("update")
+            time.sleep(5)
+
+    def process_plot_queue(self):
+        try:
+            while not self.plot_queue.empty():
+                task = self.plot_queue.get_nowait()
+                if task == "update":
+                    self.root.after(0, self.safe_update_all)
+        except queue.Empty:
+            pass
+        finally:
+            # vuelve a revisar en 100 ms
+            self.root.after(100, self.process_plot_queue)
 
     def sync_gui_update_if_overlay(self):
         self.load_data()
-        if self.active_view == "overlay":
-            self.plot_psd_overlay()
+        self.update_all_plots()
+
+    def clear_plot_queue(self):
+        with self.plot_queue.mutex:
+            self.plot_queue.queue.clear()
+
+    def safe_update_all(self):
+        self.load_data()
+        self.update_all_plots()
+
 
 
     def sync_gui_update(self):
@@ -173,11 +199,11 @@ class CheckGUI:
             self.plot_singular_values()
 
     def plot_psd_overlay(self):
+        self.clear_plot_queue()
         if not self.data:
             self.load_data()
             if not self.data:
                 return
-
         self.active_view = "overlay"
 
         self.checkbox_frame.pack(padx=10, pady=5, fill="x")
@@ -187,8 +213,8 @@ class CheckGUI:
 
         # Desactivar hover temporalmente y limpiar
         self.ax.cla()
-        self.annotation.set_visible(False)
-        self.vline.set_visible(False)
+        # self.annotation.set_visible(False)
+        # self.vline.set_visible(False)
 
         f = np.array(self.data["frequencies"])
         has_data = False
@@ -219,8 +245,8 @@ class CheckGUI:
             self.ax.set_yscale("linear")
 
         # Volver a conectar el evento después de redibujar
-        self.canvas.mpl_disconnect(self.canvas._cid)
-        self.canvas._cid = self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
+        # self.canvas.mpl_disconnect(self.canvas._cid)
+        # self.canvas._cid = self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
 
         self.canvas.draw_idle()
 
@@ -229,6 +255,8 @@ class CheckGUI:
 
 
     def plot_psd_mosaic(self):
+        self.clear_plot_queue()
+        self.mosaic_ready = False
         self.load_data()
         if not self.data:
             return
@@ -283,8 +311,10 @@ class CheckGUI:
         self.mosaic_canvas.draw()
         self.mosaic_canvas.mpl_connect("motion_notify_event", self.on_hover_mosaic)
         plt.close(self.mosaic_fig)
+        self.mosaic_ready = True
 
     def plot_singular_values(self):
+        self.clear_plot_queue()
         self.load_data()
         if not self.data:
             return
@@ -297,8 +327,8 @@ class CheckGUI:
             self.mosaic_canvas.get_tk_widget().pack_forget()
 
         self.ax.cla()
-        self.annotation.set_visible(False)
-        self.vline.set_visible(False)
+        # self.annotation.set_visible(False)
+        # self.vline.set_visible(False)
 
         f = np.array(self.data["frequencies"])
         sv = self.data["singular_values"]
@@ -323,57 +353,57 @@ class CheckGUI:
         else:
             self.ax.set_yscale("linear")
 
-        self.canvas.mpl_disconnect(self.canvas._cid)
-        self.canvas._cid = self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
+        # self.canvas.mpl_disconnect(self.canvas._cid)
+        # self.canvas._cid = self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
 
         self.canvas.draw_idle()
 
 
 
-    def on_hover_main(self, event):
-        if not event.inaxes or not self.data:
-            self.annotation.set_visible(False)
-            self.vline.set_visible(False)
-            self.canvas.draw_idle()
-            return
+    # def on_hover_main(self, event):
+    #     if not event.inaxes or not self.data:
+    #         self.annotation.set_visible(False)
+    #         self.vline.set_visible(False)
+    #         self.canvas.draw_idle()
+    #         return
 
-        closest_line = None
-        closest_index = None
-        min_dist = float("inf")
+    #     closest_line = None
+    #     closest_index = None
+    #     min_dist = float("inf")
 
-        for line in self.ax.lines:
-            xdata = line.get_xdata()
-            ydata = line.get_ydata()
-            if len(xdata) == 0:
-                continue
-            index = np.searchsorted(xdata, event.xdata)
-            if 0 <= index < len(xdata):
-                dx = xdata[index] - event.xdata
-                dy = ydata[index] - event.ydata
-                dist = dx**2 + dy**2
-                if dist < min_dist:
-                    min_dist = dist
-                    closest_line = line
-                    closest_index = index
+    #     for line in self.ax.lines:
+    #         xdata = line.get_xdata()
+    #         ydata = line.get_ydata()
+    #         if len(xdata) == 0:
+    #             continue
+    #         index = np.searchsorted(xdata, event.xdata)
+    #         if 0 <= index < len(xdata):
+    #             dx = xdata[index] - event.xdata
+    #             dy = ydata[index] - event.ydata
+    #             dist = dx**2 + dy**2
+    #             if dist < min_dist:
+    #                 min_dist = dist
+    #                 closest_line = line
+    #                 closest_index = index
 
-        if closest_line and closest_index is not None:
-            x = closest_line.get_xdata()[closest_index]
-            y = closest_line.get_ydata()[closest_index]
-            label = closest_line.get_label()
-            self.annotation.xy = (x, y)
-            self.annotation.set_text(f"{label}\n{float(x):.2f} Hz\n{float(y):.2e}")
-            self.annotation.set_visible(True)
+    #     if closest_line and closest_index is not None:
+    #         x = closest_line.get_xdata()[closest_index]
+    #         y = closest_line.get_ydata()[closest_index]
+    #         label = closest_line.get_label()
+    #         self.annotation.xy = (x, y)
+    #         self.annotation.set_text(f"{label}\n{float(x):.2f} Hz\n{float(y):.2e}")
+    #         self.annotation.set_visible(True)
 
-            self.vline.set_xdata([x, x])
-            self.vline.set_visible(True)
-            self.canvas.draw_idle()
-        else:
-            self.annotation.set_visible(False)
-            self.vline.set_visible(False)
-            self.canvas.draw_idle()
+    #         self.vline.set_xdata([x, x])
+    #         self.vline.set_visible(True)
+    #         self.canvas.draw_idle()
+    #     else:
+    #         self.annotation.set_visible(False)
+    #         self.vline.set_visible(False)
+    #         self.canvas.draw_idle()
 
     def on_hover_mosaic(self, event):
-        if not self.mosaic_fig or not event.inaxes:
+        if not self.mosaic_ready or not self.mosaic_fig or not event.inaxes:
             for ann in self.annotations:
                 ann.set_visible(False)
             if self.mosaic_canvas:

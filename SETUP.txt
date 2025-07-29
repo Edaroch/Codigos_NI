@@ -1,11 +1,11 @@
 # CONFIGURACION DE CAPTURA
-total_capture_time: 10 # Tiempo total de captura en segundos (0 para captura continua).
+total_capture_time: 0 # Tiempo total de captura en segundos (0 para captura continua).
 backup_time: 600 # Tiempo en segundos entre cada respaldo de la base de datos SQLite3 a MongoDB (0 para que no haga respaldos).
 restart_time: 6h # Configuración de reinicio, 0 para adquisición continua, 10s para cada diez segundos, 1h para cada una hora , 1d para cada un día y 1w para cada una semana.
 debug: true # Modo de depuración, True para activar debug logs, False para desactivarlos.
 
 # CONFIGURACION DEL DAQ
-deviceName: cDAQ1 # Nombre del dispositivo de adquisición de datos cDAQ9185-21DA9E1.cDAQ9189-213ABD2
+deviceName: cDAQ9185-21DA9E1 # Nombre del dispositivo de adquisición de datos cDAQ9185-21DA9E1.cDAQ9189-213ABD2
 original_rate: 1600 # Frecuencia de muestreo original en Hz del DAQ. De 2Hz a 24000Hz.
 buffer_size: 1600 # Tamaño del buffer del DAQ para la captura de datos. El DAQ envia datos cuando se llena el buffer. Si capturas a 200Hz y el buffer_size es 600, enviará datos cada 3 segundos.
 decimation_factor: 8 # Factor de decimación para reducir la frecuencia de muestreo.
