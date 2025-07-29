@@ -5,9 +5,9 @@ from multiprocessing import Event as MPEvent  # multiprocessing.Event para proce
 
 path.append('src')
 
-from DataAcquisitionContMultiProc import run_data_acquisition
-from LoadSetupData import load_config, parse_restart_time
-from SetupDatabase import setup_database, get_sensor_numbers, create_sqlite_path_if_not_exists
+from data_acquisition import run_data_acquisition
+from load_setup_data import load_config, parse_restart_time
+from setup_database import setup_database, get_sensor_numbers, create_sqlite_path_if_not_exists
 
 from warnings import filterwarnings
 filterwarnings(action="ignore", message="unclosed", category=ResourceWarning)
@@ -49,8 +49,6 @@ def main():
         input("PRESS ENTER TO STOP")
         stop_event.set()
         process_stop_event.set()
-
-
 
     # Iniciar un hilo para esperar a que el usuario presione ENTER
     stop_thread = Thread(target=stop_acquisition)

@@ -3,6 +3,9 @@ from os import makedirs, path  # Solo se importan makedirs y path
 from pymongo import MongoClient, ASCENDING, errors  # Importar MongoClient y ASCENDING de pymongo
 from colorama import Fore, Style
 
+# Crear cliente persistente para MongoDB
+mongo_client = None
+
 def create_sqlite_path_if_not_exists(sqlite_db_path):
     """
     Crea la carpeta y archivo SQLite si no existen.
@@ -18,7 +21,6 @@ def create_sqlite_path_if_not_exists(sqlite_db_path):
     if not path.exists(sqlite_db_path):
         open(sqlite_db_path, 'a').close()
         print(f"Base de datos SQLite creada: {sqlite_db_path}")
-
 
 def get_sensor_numbers(config):
     """
@@ -65,17 +67,15 @@ def get_sensor_numbers(config):
     if exist_unused_ch:
         for i in unused_ch:
             sensor_numbers.remove(i)
-    print(sensor_numbers)
-    print(sensor_numbers_all)
+    # print(sensor_numbers)
+    # print(sensor_numbers_all)
     return sensor_numbers, sensor_numbers_all
-
 
 def isNaN(float_number):
     """
     Verifica si un número es NaN.
     """
     return float_number != float_number
-
 
 def setup_database(sqlite_db_path, config, sensor_numbers):
     """
@@ -181,6 +181,30 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
         if mongo_client:
             mongo_client.close()
 
+def initialize_mongodb_client(db_config):
+    """
+    Initializes the MongoDB client if not already initialized.
+    Handles connection errors and returns None if MongoDB is unavailable.
+    """
+    global mongo_client
+    if mongo_client is None:
+        try:
+            # Create the MongoDB client with a 5-second timeout
+            mongo_client = MongoClient(db_config['db_host'], db_config['db_port'], serverSelectionTimeoutMS=5000)
+            
+            # Test the connection by pinging the server
+            mongo_client.admin.command('ping')
+        except errors.ServerSelectionTimeoutError:
+            print("Error: Cannot connect to MongoDB. Backups will be disabled.")
+            mongo_client = None  # Ensure the client remains None if connection fails
+    return mongo_client
+
+def close_mongodb_client():
+    """Closes the MongoDB client if it is open."""
+    global mongo_client
+    if mongo_client is not None:
+        mongo_client.close()
+        mongo_client = None  # Resetear para asegurarnos de que se puede reinicializar más adelante
 
 if __name__ == "__main__":
     pass  # Este archivo no está destinado a ejecutarse directamente
