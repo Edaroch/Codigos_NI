@@ -71,6 +71,7 @@ This project enables real-time data acquisition from multiple seismic sensors us
 │   ├── setup_database.py
 │   ├── load_setup_data.py
 │   ├── utils.py
+│   ├── GUI.py
 │   └── GUI_check.py
 ```
 
@@ -119,13 +120,13 @@ This project enables real-time data acquisition from multiple seismic sensors us
 
 ### 🖥️ GUI
 - Run `RUNGUI.bat` to launch config interface (`GUI.py`).
-- Press `Run` to launch `main.py` in a new console.
+- Press `Run Acquisition` to launch `main.py` in a new console.
 
 ### 🛠️ Command-line
 - Run `RUNMAIN.bat` to start the acquisition process directly.
 
 ### ⏹️ Stopping
-- Press ENTER in the acquisition console, then close it manually.
+- Press ENTER in the acquisition console, then close it manually or press  `Stop Acquisition` in GUI.
 
 ---
 

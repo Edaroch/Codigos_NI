@@ -1,5 +1,5 @@
 import sys
-sys.path.append('src')  # Añadir la carpeta 'src' al path
+sys.path.append('src')
 import shutil
 import os
 import tkinter as tk
@@ -9,10 +9,12 @@ import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from load_setup_data import load_config  # Importar load_config desde LoadSetupData.py
+from load_setup_data import load_config
+from tkinter import ttk
 
 
-# Función para guardar la configuración sin borrar comentarios ni agregar líneas en blanco
+# Function to save the configuration without deleting comments or adding blank lines
+
 def save_config(config):
     with open('SETUP.txt', 'r') as file:
         lines = file.readlines()
@@ -20,8 +22,8 @@ def save_config(config):
     with open('SETUP.txt', 'w') as file:
         for line in lines:
             line_stripped = line.strip()
-            if line_stripped and not line_stripped.startswith('#'):  # Si no es comentario
-                key = line_stripped.split(': ')[0]  # Obtiene la clave (por ejemplo, 'deviceName')
+            if line_stripped and not line_stripped.startswith('#'):  # If not a comment
+                key = line_stripped.split(': ')[0]  # Get the key (e.g., 'deviceName')
                 if key in config:
                     value = config[key]
                     if key == 'debug':
@@ -69,9 +71,11 @@ class AcquisitionGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Data Acquisition Control Panel")
-        self.root.geometry('1200x800')  # Ajustar tamaño de la ventana
+        self.root.state('zoomed')
         self.auto_update = False  # Flag para autoactualización
         self.main_process = None  # Almacena el proceso main.py
+        self.acquisition_running = False
+        
 
         # Realizar copia de seguridad del archivo SETUP.txt
         self.backup_setup_file()
@@ -81,13 +85,14 @@ class AcquisitionGUI:
 
         # Variables para organizar las secciones del archivo
         self.sections = {
-            "CAPTURE SETUP": ["total_capture_time", "backup_time", "restart_time", "debug"],
+            "CAPTURE SETUP": ["total_capture_time", "restart_time", "debug"],
             "DAQ SETUP": [
                 "deviceName", "original_rate", "buffer_size", "decimation_factor",
                 "daq_num_modules", "daq_ch_per_module", "unused_ch"
             ],
             "SENSOR SETUP": ["min_val", "max_val", "sensitivity"],
-            "DATABASES SETUP": ["db_path","sqlite_name", "db_host", "db_port", "db_backup_name"]
+            "BUFFER DATABASE SETUP (SQL)": ["db_path","sqlite_name"],
+            "BACKUP DATABASE SETUP (MongoDB)": ["backup_time", "db_host", "db_port", "db_backup_name"]
         }
 
         # Explicaciones de las variables
@@ -102,7 +107,7 @@ class AcquisitionGUI:
             "sensitivity": "Sensor sensitivity. Check the sensor's technical datasheet.",
             "daq_num_modules": "Number of modules connected to the DAQ. The modules must be connected to the DAQ in ascending order.",
             "daq_ch_per_module": "Number of channels per module.",
-            "unused_ch": "Unused channels. Use NaN for all sensors. Two-digit numbers separated by commas (e.g., 20, 22), where ij: i -> module number; j -> channel number.",
+            "unused_ch": "Unused channels. Use NaN for all sensors. Numbers separated by commas (e.g., 20, 22), where ij: i -> module number; j -> channel number.",
             "debug": "Enable debug mode (True/False).",
             "db_host": "MongoDB host.",
             "db_port": "MongoDB port.",
@@ -113,6 +118,27 @@ class AcquisitionGUI:
             "restart_time": "Example: '10s' every ten seconds, '1h' for an hour, '1d' for a day."
         }
 
+        self.units = {
+            "total_capture_time": "s",
+            "restart_time": " ",
+            "original_rate": "Hz",
+            "buffer_size": "samples",
+            "decimation_factor": "",
+            "frequency_rate": "Hz",
+            "min_val": "m/s²",
+            "max_val": "m/s²",
+            "sensitivity": "V/g",
+            "backup_time": "s",
+            "db_port": "",
+        }
+
+        self.locked_fields = {
+            key: True for key in [
+                "restart_time", "debug", "original_rate", "buffer_size","decimation_factor","backup_time","unused_ch",
+                "db_path", "sqlite_name", "db_host", "db_port", "db_backup_name"
+            ]
+        }
+        
         # Variables de entrada de los parámetros
         self.entries = {}
 
@@ -131,12 +157,16 @@ class AcquisitionGUI:
         self.console_output.pack(pady=10)
         self.update_console(
 '''INSTRUCTIONS:
-- Modify the default values if necessary and press 'Update Data' to save the configuration.
-- Then, press the 'Run' button to start the capture process.
-- To stop the capture, access the console, press ENTER, and manually close the console.
-- For non-continuous captures, use a backup time of 0. Before restarting the capture, change the database name if you want to save it in a new one.
-- Restart Time is the time in seconds to automatically restart the capture. If set to 0s, it will not restart and will accumulate a processing delay. This parameter is useful for clearing the buffer and will depend on the computer's capacity. It is recommended to set it once per day.
-- Remember to save your last configuration before closing the program if desired.
+- Modify the default values if necessary and press 'Save Changes' to update the configuration.
+- Press the 'Run Acquisition' button to start the data capture process.
+- Press the 'Stop Acquisition' button to stop the acquisition at any time.
+- To update the list of available sensors from the database, press 'Find Sensors'.
+- To enable automatic updates of the plot every 2 seconds, check the 'Auto-update' box.
+- To visualize frequency-domain data, press 'Check Data' to open the Check GUI with PSD and SVD plots.
+- If you want to perform non-continuous captures, set the 'backup_time' to 0.
+- Before starting a new acquisition, change the database name if you want to store the data in a new file.
+- The only parameter that accepts time units is 'restart_time'; Use 's' for seconds (e.g., 10s), use 'h' for hours (e.g., 1h), use 'd' for days (e.g., 1d). This field defines the interval to restart the acquisition. If set to 0s, it won't restart and may accumulate delay.
+- Always save your last configuration before closing the program if you wish to preserve it.
 '''
         )
 
@@ -185,7 +215,7 @@ class AcquisitionGUI:
     def create_scrollable_panel(self):
         """Creates a scrollable panel for configurations with a fixed width"""
         # Establecer el ancho fijo que deseas para el canvas
-        fixed_width = 350  # Por ejemplo, un ancho fijo de 300 píxeles
+        fixed_width = 400  # Por ejemplo, un ancho fijo de 300 píxeles
 
         canvas = tk.Canvas(self.root, width=fixed_width)  # Fijar el ancho del canvas
         scroll_y = tk.Scrollbar(self.root, orient="vertical", command=canvas.yview)
@@ -214,26 +244,101 @@ class AcquisitionGUI:
 
             # Marco para las filas dentro de la sección
             section_frame = tk.Frame(parent)
-            section_frame.pack(pady=5, fill=tk.X)  # Expandir para ocupar todo el ancho
+            section_frame.pack(pady=5, fill=tk.X)
+
+            row_offset = 0  # Controla las filas adicionales
 
             for row, key in enumerate(keys):
                 value = self.config.get(key, "")
-                
-                # Nombre de la variable (columna 0)
-                variable_label = tk.Label(section_frame, text=key, anchor="w", width=20)
-                variable_label.grid(row=row, column=0, padx=10, pady=5, sticky="w")
-                
-                # Cuadro de texto para editar el valor (columna 1)
+
+                # Label
+                unit = self.units.get(key, "")
+                label_text = f"{key} ({unit})" if unit else key
+                variable_label = tk.Label(section_frame, text=label_text, anchor="w", width=25)
+                variable_label.grid(row=row + row_offset, column=0, padx=10, pady=5, sticky="w")
+
+                # Entry
                 entry = tk.Entry(section_frame, width=20)
                 entry.insert(0, str(value))
-                entry.grid(row=row, column=1, padx=10, pady=5, sticky="w")
+
+                # Deshabilita si está en la lista de campos bloqueados
+                if key in self.locked_fields and self.locked_fields[key]:
+                    entry.config(state='readonly')
+
+                entry.grid(row=row + row_offset, column=1, padx=10, pady=5, sticky="w")
                 self.entries[key] = entry
-                
-                # Descripción del tooltip (se asocia al Label de la variable)
+
+
+                # Tooltip
                 description_text = self.explanations.get(key, "No description available")
-                
-                # Crear el tooltip para el label de la variable
                 ToolTip(variable_label, description_text)
+
+                # Botón de candado si aplica
+                if key in self.locked_fields:
+                    lock_button = tk.Button(
+                        section_frame,
+                        text="🔒" if self.locked_fields[key] else "🔓",
+                        width=2,
+                        command=lambda k=key, e=entry, b=None: self.toggle_lock(k, e, b)
+                    )
+                    lock_button.config(command=lambda k=key, e=entry, b=lock_button: self.toggle_lock(k, e, b))
+                    lock_button.grid(row=row + row_offset, column=2, padx=5)
+
+                # Si es decimation_factor, añadir campo extra de frecuencia debajo
+                if key == "decimation_factor":
+                    row_offset += 1  # Saltar una fila para el nuevo campo
+
+                    freq_label = tk.Label(section_frame, text="frequency_rate", anchor="w", width=20)
+                    freq_label.grid(row=row + row_offset, column=0, padx=10, pady=5, sticky="w")
+                    ToolTip(freq_label, "Select desired sampling frequency in Hz. It will automatically set the appropriate decimation factor.")
+
+                    freq_var = tk.StringVar()
+                    freq_combo = ttk.Combobox(section_frame, textvariable=freq_var, state="readonly", width=18)
+                    freq_combo['values'] = ["10 Hz", "20 Hz", "50 Hz", "75 Hz", "100 Hz", "150 Hz", "200 Hz", "250 Hz", "300 Hz", "400 Hz"]
+                    freq_combo.grid(row=row + row_offset, column=1, padx=10, pady=5, sticky="w")
+
+                    # Función para actualizar decimation desde frecuencia
+                    def on_freq_selected(event, entry=entry, freq_var=freq_var):
+                        try:
+                            original_rate = int(self.entries["original_rate"].get())
+                            freq = float(freq_var.get().split()[0])
+                            decimation = round(original_rate / freq)
+                            entry.config(state='normal')
+                            entry.delete(0, tk.END)
+                            entry.insert(0, str(decimation))
+                            if self.locked_fields.get("decimation_factor", False):
+                                entry.config(state='readonly')
+                        except Exception as e:
+                            print(f"Error updating decimation from frequency: {e}")
+
+                    # Función para actualizar frecuencia desde decimation
+                    def on_decimation_changed(event=None, entry=entry, freq_var=freq_var):
+                        try:
+                            original_rate = int(self.entries["original_rate"].get())
+                            decimation = int(entry.get())
+                            freq = round(original_rate / decimation, 2)
+                            freq_var.set(f"{freq} Hz")
+                        except Exception:
+                            pass
+
+                    freq_combo.bind("<<ComboboxSelected>>", on_freq_selected)
+                    entry.bind("<KeyRelease>", on_decimation_changed)
+                    on_decimation_changed()
+
+        update_section_button = tk.Button(parent, text="Save Changes", command=self.update_config)
+        update_section_button.pack(pady=(10, 15))
+
+    
+    def toggle_lock(self, key, entry_widget, button_widget):
+        is_locked = self.locked_fields[key]
+        if is_locked:
+            entry_widget.config(state='normal')
+            button_widget.config(text="🔓")
+        else:
+            entry_widget.config(state='readonly')
+            button_widget.config(text="🔒")
+        self.locked_fields[key] = not is_locked
+
             
 
     def create_plot_panel(self):
@@ -265,7 +370,7 @@ class AcquisitionGUI:
         self.figure = plt.Figure(figsize=(10, 2), dpi=100)
         self.ax = self.figure.add_subplot(111)
         self.ax.set_title('Last 20 seconds of recorded data')
-        self.ax.set_xlabel('Time')
+        self.ax.set_xlabel('Time UTC+0')
         self.ax.set_ylabel('Acceleration (m/s²)')
         self.ax.grid(True)
 
@@ -414,7 +519,7 @@ class AcquisitionGUI:
         df = self.load_last_20_seconds()
         self.ax.clear()
         self.ax.set_title('Last 20 seconds of recorded data')
-        self.ax.set_xlabel('Time')
+        self.ax.set_xlabel('Time UTC+0')
         self.ax.set_ylabel('Acceleration (m/s²)')
         self.ax.grid(True)
 
@@ -427,8 +532,13 @@ class AcquisitionGUI:
 
             # Calcular desfase entre el último timestamp y el tiempo actual
             last_timestamp = df['timestamp'].max()
-            current_time = pd.Timestamp.now()
-            time_lag = (current_time - (last_timestamp)).total_seconds()
+            last_timestamp = pd.to_datetime(last_timestamp)
+            if last_timestamp.tzinfo is None:
+                last_timestamp = last_timestamp.tz_localize('UTC')
+
+            current_time = pd.Timestamp.now(tz='UTC')
+
+            time_lag = (current_time - last_timestamp).total_seconds()
 
             # Actualizar el cuadro de desfase
             self.time_lag_label.config(text=f"Time Lag: {time_lag:.2f}s")
@@ -453,19 +563,41 @@ class AcquisitionGUI:
             self.update_plot()
             self.root.after(1000, self.auto_update_plot)
 
+    # def execute_main(self):
+    #     # Guardar la configuración actualizada
+    #     self.update_config()
+
+    #     # Ejecutar main.py en un nuevo cmd
+    #     self.update_console("Running main.py in a new console window...")
+    #     if os.name == 'nt':  # Windows
+    #         subprocess.Popen(['start', 'cmd', '/c', 'python', 'main.py'], shell=True)
+    #     else:  # Linux, macOS
+    #         subprocess.Popen(['x-terminal-emulator', '-e', 'python main.py'])
+
+    #     self.update_console("Acquisition running. Press 'Stop Acquisition' button to stop the acquisition process.")
+    #     self.acquisition_running = True
+
     def execute_main(self):
+        if self.acquisition_running:
+            self.update_console("⚠️ Acquisition is already running.")
+            messagebox.showinfo("Already Running", "An acquisition process is already running.")
+            return
+
         # Guardar la configuración actualizada
         self.update_config()
 
         # Ejecutar main.py en un nuevo cmd
         self.update_console("Running main.py in a new console window...")
         if os.name == 'nt':  # Windows
-            subprocess.Popen(['start', 'cmd', '/k', 'python', 'main.py'], shell=True)
+            subprocess.Popen(['start', 'cmd', '/c', 'python', 'main.py'], shell=True)
         else:  # Linux, macOS
             subprocess.Popen(['x-terminal-emulator', '-e', 'python main.py'])
 
-        self.update_console("Process running. Press ENTER in the console to stop and then manually close the console.")
+        self.acquisition_running = True
+        self.update_console("Acquisition running. Press 'Stop Acquisition' button to stop the acquisition process.")
 
+        # Desactivar botón Run Acquisition si está disponible
+        self.execute_button.config(state="disabled")
 
 
     def update_console(self, message):
@@ -504,7 +636,7 @@ class AcquisitionGUI:
 
         # Guardar los nuevos valores en el archivo SETUP.txt
         save_config(self.config)
-        self.update_console("Configuration data updated in SETUP.txt.")
+        self.update_console("Configuration data saved in SETUP.txt, Stop any acquisition before running a new one with new parameters.")
 
     def open_check_gui(self):
         script_path = os.path.join("src", "GUI_check.py")
@@ -512,20 +644,36 @@ class AcquisitionGUI:
         python_executable = sys.executable  # usa el mismo intérprete actual
         subprocess.Popen([python_executable, script_path])
 
+    def stop_acquisition(self):
+        if not self.acquisition_running:
+            messagebox.showinfo("Not Running", "There is no acquisition process running.")
+            return
+
+        try:
+            with open("STOP.txt", "w") as f:
+                f.write("stop")
+            self.acquisition_running = False  # Solo marcarlo como detenido si el archivo se creó con éxito
+            self.execute_button.config(state="normal")  # <-- AQUI
+            messagebox.showinfo("Stop", "Stop signal sent. If the process doesn't close automatically, press ENTER in the acquisition window.")
+        except Exception as e:
+            self.update_console(f"❌ Failed to send stop signal: {e}")
+
+
+
 
     def create_control_buttons(self):
         """Creates the control buttons."""
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=10)
 
-        execute_button = tk.Button(button_frame, text="Run", command=self.execute_main)
-        execute_button.grid(row=0, column=0, padx=10)
+        self.execute_button = tk.Button(button_frame, text="Run Acquisition", command=self.execute_main)
+        self.execute_button.grid(row=0, column=0, padx=10)
 
-        update_button = tk.Button(button_frame, text="Update Data", command=self.update_config)
-        update_button.grid(row=0, column=2, padx=10)
+        stop_button = tk.Button(button_frame, text="Stop Acquisition", command=self.stop_acquisition)
+        stop_button.grid(row=0, column=3, padx=10)
 
         check_button = tk.Button(button_frame, text="Check Data", command=self.open_check_gui)
-        check_button.grid(row=0, column=4, padx=10)
+        check_button.grid(row=0, column=5, padx=10)
 
 if __name__ == "__main__":
     root = tk.Tk()

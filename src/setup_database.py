@@ -15,12 +15,12 @@ def create_sqlite_path_if_not_exists(sqlite_db_path):
     # Crear el directorio si no existe
     if not path.exists(directory):
         makedirs(directory)
-        print(f"Directorio creado: {directory}")
+        print(f"Directory created: {directory}")
 
     # Crear el archivo de base de datos SQLite si no existe
     if not path.exists(sqlite_db_path):
         open(sqlite_db_path, 'a').close()
-        print(f"Base de datos SQLite creada: {sqlite_db_path}")
+        print(f"SQLite database created: {sqlite_db_path}")
 
 def get_sensor_numbers(config):
     """
@@ -134,14 +134,14 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
         cursor.execute('INSERT INTO sensors (sensor_number) VALUES (?)', (sensor_number,))
     conn.commit()
     conn.close()
-    print("Configuración de la base de datos SQLite completa.")
+    print("Database setup complete in SQLite.")
 
 
 # Configuración de MongoDB
     mongo_client = None
     if config['backup_time'] == 0:
         if config["debug"]:
-            print(Fore.RED + "Backup_time es 0, no se configura base de datos en MongoDB" + Style.RESET_ALL)
+            print(Fore.RED + "Backup_time is 0, MongoDB database will not be configured" + Style.RESET_ALL)
         return
     try:
         # Inicializar cliente MongoDB
@@ -155,7 +155,7 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
 
         # Crear índices en MongoDB
         accelerations_collection_raw.create_index([("timestamp", ASCENDING)])
-        print("Índices de timestamp creados en la base de datos raw.")
+        print("Timestamp indexes created in the raw database.")
 
         # Verificar sensores existentes en MongoDB
         existing_sensors_raw = sensors_collection_raw.find({}, {"sensor_number": 1})
@@ -166,16 +166,16 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
         if new_sensors_raw:
             sensor_documents_raw = [{'sensor_number': sensor_number} for sensor_number in new_sensors_raw]
             sensors_collection_raw.insert_many(sensor_documents_raw)
-            print(f"Se han añadido {len(new_sensors_raw)} sensores nuevos en la base de datos raw.")
+            print(f"Added {len(new_sensors_raw)} new sensors to the raw database.")
 
-        print("Configuración de la base de datos raw completa en MongoDB.")
+        print("Raw database setup complete in MongoDB.")
 
     except errors.ServerSelectionTimeoutError as e:
-        print(f"Error al conectar con MongoDB: {e}")
-        print(Fore.RED + "MongoDB no está disponible. Se desactivarán los respaldos. Tiempo de respaldo se modificará a 0"+ Style.RESET_ALL)
+        print(f"Error connecting to MongoDB: {e}")
+        print(Fore.RED + "MongoDB is not available. Backups will be disabled. Backup time will be set to 0" + Style.RESET_ALL)
         config['backup_time'] = 0
     except Exception as e:
-        print(f"Error al configurar MongoDB: {e}")
+        print(f"Error configuring MongoDB: {e}")
         config['backup_time'] = 0
     finally:
         if mongo_client:
