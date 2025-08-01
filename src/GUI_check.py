@@ -47,23 +47,29 @@ class CheckGUI:
 
 
 
-        # Max Frequency Control
+        # Frequency Range Controls
+        self.freq_min_var = tk.DoubleVar(value=0.0)
+        min_freq_label = ttk.Label(top_frame, text="Min Frequency (Hz):")
+        min_freq_label.grid(row=0, column=2, padx=(10, 5))
+
+        self.freq_min_entry = ttk.Entry(top_frame, textvariable=self.freq_min_var, width=6)
+        self.freq_min_entry.grid(row=0, column=3, padx=5)
+
         self.freq_max_var = tk.DoubleVar(value=50.0)
         freq_label = ttk.Label(top_frame, text="Max Frequency (Hz):")
-        freq_label.grid(row=0, column=2, padx=(20, 5))
+        freq_label.grid(row=0, column=4, padx=(20, 5))
 
         self.freq_entry = ttk.Entry(top_frame, textvariable=self.freq_max_var, width=6)
-        self.freq_entry.grid(row=0, column=3, padx=5)
+        self.freq_entry.grid(row=0, column=5, padx=5)
 
-        # Botón "Refresh" justo al lado del campo de frecuencia
         self.freq_refresh_btn = ttk.Button(top_frame, text="Refresh", command=self.update_all_plots)
-        self.freq_refresh_btn.grid(row=0, column=4, padx=5)
+        self.freq_refresh_btn.grid(row=0, column=6, padx=5)
 
  
 
         self.log_check = ttk.Checkbutton(top_frame, text="Log Scale", variable=self.log_scale_var,
                             command=self.update_all_plots)
-        self.log_check.grid(row=0, column=5, padx=5)
+        self.log_check.grid(row=0, column=7, padx=5)
 
 
         # PSD buttons
@@ -244,8 +250,9 @@ class CheckGUI:
             self.ax.legend()
 
             try:
+                fmin = self.freq_min_var.get()
                 fmax = self.freq_max_var.get()
-                self.ax.set_xlim([0, fmax])
+                self.ax.set_xlim([fmin, fmax])
             except tk.TclError:
                 pass
         else:
@@ -294,8 +301,9 @@ class CheckGUI:
         for i, (label, values) in enumerate(psd.items()):
             axs[i].plot(f, values, label=label)
             try:
+                fmin = self.freq_min_var.get()
                 fmax = self.freq_max_var.get()
-                axs[i].set_xlim([0, fmax])
+                axs[i].set_xlim([fmin, fmax])
             except tk.TclError:
                 pass
             if self.log_scale_var.get():
@@ -360,8 +368,9 @@ class CheckGUI:
         self.ax.legend()
 
         try:
+            fmin = self.freq_min_var.get()
             fmax = self.freq_max_var.get()
-            self.ax.set_xlim([0, fmax])
+            self.ax.set_xlim([fmin, fmax])
         except tk.TclError:
             pass
 
