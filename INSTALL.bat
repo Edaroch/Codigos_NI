@@ -1,60 +1,90 @@
 @echo off
 echo =========================================================
-echo BIENVENIDO A LA CONFIGURACION DEL PROYECTO
+echo WELCOME TO THE PROJECT SETUP
 echo =========================================================
 
-:: Aviso sobre NI MAX
-echo Paso 1: Este proyecto requiere que NI MAX esté instalado.
-echo ¿Está NI MAX instalado en este equipo? (s/n)
-set /p nimax_installed="Respuesta: "
+:: Step 1: Check if Python is installed and if version is >= 3.8
+echo Step 1: Checking if Python is installed and if version is 3.8 or higher...
 
-if /i "%nimax_installed%"=="s" (
-    echo Continuando con la configuración...
+python --version 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Python is not installed.
+    echo Please install the latest version of Python from: https://www.python.org/downloads/
+    pause
+    exit /b
+)
+
+:: Check Python version
+for /f "tokens=2 delims= " %%a in ('python --version') do set PYTHON_VERSION=%%a
+echo Installed Python version: %PYTHON_VERSION%
+
+:: Check if Python version is 3.8 or higher
+for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
+    set MAJOR=%%a
+    set MINOR=%%b
+)
+
+if %MAJOR% LSS 3 (
+    echo ERROR: Python version is lower than 3.8. Please install Python 3.8 or higher.
+    echo You can download the latest version from: https://www.python.org/downloads/
+    pause
+    exit /b
+)
+
+if %MAJOR%==3 (
+    if %MINOR% LSS 8 (
+        echo ERROR: Python version is lower than 3.8. Please install Python 3.8 or higher.
+        echo You can download the latest version from: https://www.python.org/downloads/
+        pause
+        exit /b
+    )
+)
+
+echo Python 3.8 or higher is installed.
+echo.
+
+:: Step 2: Check if NI MAX is installed
+echo Step 2: This project requires NI MAX to be installed.
+echo Is NI MAX installed on this computer? (y/n)
+set /p nimax_installed="Answer: "
+
+if /i "%nimax_installed%"=="y" (
+    echo Continuing with the setup...
 ) else (
     echo =========================================================
-    echo DESCARGUE E INSTALE NI MAX DESDE: https://www.ni.com
-    echo Luego de instalarlo, vuelva a ejecutar este script.
+    echo PLEASE DOWNLOAD AND INSTALL NI MAX FROM: https://www.ni.com
+    echo After installation, run this script again.
     echo =========================================================
     pause
     exit /b
 )
 
-:: Verificar instalación de Python 3.10
-echo Paso 2: Verificando instalación de Python 3.10...
-python --version | findstr "3.10" >nul
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Python 3.10 no está instalado o no está en el PATH.
-    echo Descargue Python 3.10 desde: https://www.python.org/downloads/
-    pause
-    exit /b
-)
-echo Python 3.10 está instalado.
-
-:: Verificar existencia de requirements.txt
+:: Step 3: Check for requirements.txt file
 if not exist requirements.txt (
-    echo ERROR: No se encontró el archivo requirements.txt en el directorio actual.
-    echo Asegúrese de que el archivo esté en la carpeta raíz del proyecto.
+    echo ERROR: requirements.txt file not found in the current directory.
+    echo Make sure the file is located in the project root folder.
     pause
     exit /b
 )
-echo Archivo requirements.txt encontrado.
+echo requirements.txt file found.
+echo.
 
-:: Crear entorno virtual
-echo Paso 3: Creando entorno virtual de Python (.venv)...
+:: Step 4: Create virtual environment
+echo Step 4: Creating Python virtual environment (.venv)...
 python -m venv .venv
 if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: No se pudo crear el entorno virtual.
+    echo ERROR: Failed to create virtual environment.
     pause
     exit /b
 )
 
-:: Activar entorno virtual e instalar paquetes
-echo Paso 4: Activando el entorno virtual e instalando paquetes...
+:: Step 5: Activate virtual environment and install packages
+echo Step 5: Activating virtual environment and installing packages...
 call .venv\Scripts\activate
 pip install --upgrade pip
 pip install -r requirements.txt
 if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: No se pudieron instalar los paquetes especificados en requirements.txt.
+    echo ERROR: Failed to install packages from requirements.txt.
     deactivate
     pause
     exit /b
@@ -62,7 +92,7 @@ if %ERRORLEVEL% NEQ 0 (
 deactivate
 
 echo =========================================================
-echo CONFIGURACIÓN COMPLETADA EXITOSAMENTE.
+echo SETUP COMPLETED SUCCESSFULLY.
 echo =========================================================
-echo Presione cualquier tecla para salir...
+echo Press any key to exit...
 pause

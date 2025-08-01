@@ -12,20 +12,20 @@ def load_config():
                 else:
                     config[key] = value
 
-    # Combinar sqlite_db_path y sqlite_name
+    # Combine sqlite_db_path and sqlite_name
     if 'db_path' in config and 'sqlite_name' in config:
         config['sqlite_db_path'] = f"{config['db_path']}{config['sqlite_name']}.db"
 
-    # Convertir valores numéricos
+    # Convert numeric values to appropriate types
     numeric_keys = ["total_capture_time", "original_rate", "buffer_size", "decimation_factor", 
                     "min_val", "max_val", "sensitivity", "db_port", "backup_time"]
     for key in numeric_keys:
         if key in config:
             config[key] = float(config[key]) if key in ["min_val", "max_val", "sensitivity"] else int(config[key])
 
-    # Ajustar restart_time si total_capture_time > 0
+    # adjust restart_time if total_capture_time > 0
     if config.get("total_capture_time", 0) > 0:
-        config["restart_time"] = "0s"  # Reinicio deshabilitado        
+        config["restart_time"] = "0s"  # Restart disabled
 
     return config
 
@@ -50,7 +50,7 @@ def parse_restart_time(restart_time_str):
     elif unit == "w":
         return time_value * 86400 * 7  # Semanas a segundos
     else:
-        raise ValueError(f"Formato de tiempo no soportado: {restart_time_str}")
+        raise ValueError(f"Format not supported: {restart_time_str}")
 
 if __name__ == "__main__":
     pass  # Este archivo no está destinado a ejecutarse directamente

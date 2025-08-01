@@ -35,12 +35,14 @@ class CheckGUI:
         top_frame = ttk.Frame(root)
         top_frame.pack(padx=10, pady=5, fill="x")
 
-        self.check_button = ttk.Button(top_frame, text="Check Data", command=self.check_data)
-        self.check_button.grid(row=0, column=0, padx=5)
-
-        self.auto_check = ttk.Checkbutton(top_frame, text="Auto Check", variable=self.auto_var,
+        self.auto_check = ttk.Checkbutton(top_frame, text="Auto-update", variable=self.auto_var,
                                           command=self.toggle_auto)
-        self.auto_check.grid(row=0, column=1, padx=5)
+        self.auto_check.grid(row=0, column=0, padx=5)
+
+        self.check_button = ttk.Button(top_frame, text="Plot Once", command=self.check_data)
+        self.check_button.grid(row=0, column=1, padx=5)
+
+
 
 
 
@@ -52,11 +54,16 @@ class CheckGUI:
 
         self.freq_entry = ttk.Entry(top_frame, textvariable=self.freq_max_var, width=6)
         self.freq_entry.grid(row=0, column=3, padx=5)
-        self.freq_entry.bind("<Return>", lambda e: self.update_all_plots())
+
+        # Botón "Refresh" justo al lado del campo de frecuencia
+        self.freq_refresh_btn = ttk.Button(top_frame, text="Refresh", command=self.update_all_plots)
+        self.freq_refresh_btn.grid(row=0, column=4, padx=5)
+
+ 
 
         self.log_check = ttk.Checkbutton(top_frame, text="Log Scale", variable=self.log_scale_var,
                             command=self.update_all_plots)
-        self.log_check.grid(row=0, column=4, padx=5)
+        self.log_check.grid(row=0, column=5, padx=5)
 
 
         # PSD buttons
@@ -227,7 +234,12 @@ class CheckGUI:
         if has_data:
             self.ax.set_title("Selected PSDs Overlay")
             self.ax.set_xlabel("Frequency [Hz]")
-            self.ax.set_ylabel("PSD")
+            if self.log_scale_var.get():
+                self.ax.set_yscale("log")
+                self.ax.set_ylabel("PSD [dB]")
+            else:
+                self.ax.set_yscale("linear")
+                self.ax.set_ylabel("PSD [(m/s²)²/Hz]")
             self.ax.grid(True)
             self.ax.legend()
 
@@ -286,12 +298,12 @@ class CheckGUI:
                 axs[i].set_xlim([0, fmax])
             except tk.TclError:
                 pass
-            axs[i].set_ylabel(label)
-
             if self.log_scale_var.get():
                 axs[i].set_yscale("log")
+                axs[i].set_ylabel(f"{label}\n[dB]")
             else:
                 axs[i].set_yscale("linear")
+                axs[i].set_ylabel(f"{label}\n[(m/s²)²/Hz]")
 
 
             axs[i].grid(True)
@@ -338,7 +350,12 @@ class CheckGUI:
 
         self.ax.set_title("Singular Value Decomposition")
         self.ax.set_xlabel("Frequency [Hz]")
-        self.ax.set_ylabel("Singular Value")
+        if self.log_scale_var.get():
+            self.ax.set_yscale("log")
+            self.ax.set_ylabel("Singular Value [dB]")
+        else:
+            self.ax.set_yscale("linear")
+            self.ax.set_ylabel("Singular Value [Amplitude]")
         self.ax.grid(True)
         self.ax.legend()
 
