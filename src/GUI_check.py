@@ -29,6 +29,7 @@ class CheckGUI:
         self.annotations = []
         self.log_scale_var = tk.BooleanVar(value=False)
         self.mosaic_ready = False
+        self.plotting_in_progress = False
 
 
         # Layout
@@ -118,6 +119,18 @@ class CheckGUI:
         # self.vline.set_visible(False)
 
         self.active_view = "overlay"
+
+    def prevent_if_plotting(func):
+        def wrapper(self, *args, **kwargs):
+            if self.plotting_in_progress:
+                print(f"⏳ Ignored: {func.__name__} is waiting for current plot.")
+                return
+            self.plotting_in_progress = True
+            try:
+                return func(self, *args, **kwargs)
+            finally:
+                self.plotting_in_progress = False
+        return wrapper
 
     def check_data(self):
         get_last_seconds_from_sqlite(seconds=30)
@@ -211,6 +224,8 @@ class CheckGUI:
         elif self.active_view == "svd":
             self.plot_singular_values()
 
+
+    @prevent_if_plotting
     def plot_psd_overlay(self):
         self.clear_plot_queue()
         if not self.data:
@@ -224,62 +239,57 @@ class CheckGUI:
         if self.mosaic_canvas:
             self.mosaic_canvas.get_tk_widget().pack_forget()
 
-        # Desactivar hover temporalmente y limpiar
         self.ax.cla()
-        # self.annotation.set_visible(False)
-        # self.vline.set_visible(False)
 
         f = np.array(self.data["frequencies"])
+        fmin = self.freq_min_var.get()
+        fmax = self.freq_max_var.get()
         has_data = False
+        ymax = 0
 
         for sensor_label, values in self.data["psd"].items():
             if self.channel_vars.get(sensor_label, tk.BooleanVar()).get():
-                self.ax.plot(f, values, label=sensor_label)
+                f_arr = np.array(f)
+                v_arr = np.array(values)
+                mask = (f_arr >= fmin) & (f_arr <= fmax)
+                if not np.any(mask):
+                    continue
+                self.ax.plot(f_arr[mask], v_arr[mask], label=sensor_label)
+                local_max = np.max(v_arr[mask])
+                if local_max > ymax:
+                    ymax = local_max
                 has_data = True
 
         if has_data:
             self.ax.set_title("Selected PSDs Overlay")
             self.ax.set_xlabel("Frequency [Hz]")
+            self.ax.set_xlim([fmin, fmax])
+            self.ax.set_ylim(bottom=0, top=1.05 * ymax)
+
             if self.log_scale_var.get():
                 self.ax.set_yscale("log")
                 self.ax.set_ylabel("PSD [dB]")
             else:
                 self.ax.set_yscale("linear")
                 self.ax.set_ylabel("PSD [(m/s²)²/Hz]")
+
             self.ax.grid(True)
             self.ax.legend()
-
-            try:
-                fmin = self.freq_min_var.get()
-                fmax = self.freq_max_var.get()
-                self.ax.set_xlim([fmin, fmax])
-            except tk.TclError:
-                pass
         else:
             self.ax.set_title("No sensors selected")
-
-        if self.log_scale_var.get():
-            self.ax.set_yscale("log")
-        else:
-            self.ax.set_yscale("linear")
-
-        # Volver a conectar el evento después de redibujar
-        # self.canvas.mpl_disconnect(self.canvas._cid)
-        # self.canvas._cid = self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
 
         self.canvas.draw_idle()
 
 
 
-
-
+    @prevent_if_plotting
     def plot_psd_mosaic(self):
         self.clear_plot_queue()
         self.mosaic_ready = False
         self.load_data()
         if not self.data:
             return
-        
+
         self.active_view = "mosaic"
 
         self.canvas_widget.pack_forget()
@@ -297,15 +307,25 @@ class CheckGUI:
         if num == 1:
             axs = [axs]
 
+        try:
+            fmin = self.freq_min_var.get()
+            fmax = self.freq_max_var.get()
+        except tk.TclError:
+            fmin, fmax = 0, np.max(f)
+
         self.annotations = []
         for i, (label, values) in enumerate(psd.items()):
-            axs[i].plot(f, values, label=label)
-            try:
-                fmin = self.freq_min_var.get()
-                fmax = self.freq_max_var.get()
-                axs[i].set_xlim([fmin, fmax])
-            except tk.TclError:
-                pass
+            f_arr = np.array(f)
+            v_arr = np.array(values)
+            mask = (f_arr >= fmin) & (f_arr <= fmax)
+            if not np.any(mask):
+                continue
+            axs[i].plot(f_arr[mask], v_arr[mask], label=label)
+            axs[i].set_xlim([fmin, fmax])
+
+            local_max = np.max(v_arr[mask]) if np.any(mask) else 1.0
+            axs[i].set_ylim(bottom=0, top=1.05 * local_max)
+
             if self.log_scale_var.get():
                 axs[i].set_yscale("log")
                 axs[i].set_ylabel(f"{label}\n[dB]")
@@ -313,12 +333,11 @@ class CheckGUI:
                 axs[i].set_yscale("linear")
                 axs[i].set_ylabel(f"{label}\n[(m/s²)²/Hz]")
 
-
             axs[i].grid(True)
 
             ann = axs[i].annotate("", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
-                                  bbox=dict(boxstyle="round", fc="w"),
-                                  arrowprops=dict(arrowstyle="->"))
+                                bbox=dict(boxstyle="round", fc="w"),
+                                arrowprops=dict(arrowstyle="->"))
             ann.set_visible(False)
             self.annotations.append(ann)
 
@@ -333,6 +352,8 @@ class CheckGUI:
         plt.close(self.mosaic_fig)
         self.mosaic_ready = True
 
+
+    @prevent_if_plotting
     def plot_singular_values(self):
         self.clear_plot_queue()
         self.load_data()
@@ -347,42 +368,50 @@ class CheckGUI:
             self.mosaic_canvas.get_tk_widget().pack_forget()
 
         self.ax.cla()
-        # self.annotation.set_visible(False)
-        # self.vline.set_visible(False)
 
         f = np.array(self.data["frequencies"])
         sv = self.data["singular_values"]
 
-        for label, values in sv.items():
-            self.ax.plot(f, values, label=label)
-
-        self.ax.set_title("Singular Value Decomposition")
-        self.ax.set_xlabel("Frequency [Hz]")
-        if self.log_scale_var.get():
-            self.ax.set_yscale("log")
-            self.ax.set_ylabel("Singular Value [dB]")
-        else:
-            self.ax.set_yscale("linear")
-            self.ax.set_ylabel("Singular Value [Amplitude]")
-        self.ax.grid(True)
-        self.ax.legend()
-
         try:
             fmin = self.freq_min_var.get()
             fmax = self.freq_max_var.get()
-            self.ax.set_xlim([fmin, fmax])
         except tk.TclError:
-            pass
+            fmin, fmax = 0, np.max(f)
 
-        if self.log_scale_var.get():
-            self.ax.set_yscale("log")
+        has_data = False
+        y_max = 0
+
+        for label, values in sv.items():
+            f_arr = np.array(f)
+            v_arr = np.array(values)
+            mask = (f_arr >= fmin) & (f_arr <= fmax)
+            if not np.any(mask):
+                continue
+            self.ax.plot(f_arr[mask], v_arr[mask], label=label)
+            local_max = np.max(v_arr[mask])
+            y_max = max(y_max, local_max)
+            has_data = True
+
+        if has_data:
+            self.ax.set_title("Singular Value Decomposition")
+            self.ax.set_xlabel("Frequency [Hz]")
+            self.ax.set_xlim([fmin, fmax])
+
+            if self.log_scale_var.get():
+                self.ax.set_yscale("log")
+                self.ax.set_ylabel("Singular Value [dB]")
+            else:
+                self.ax.set_yscale("linear")
+                self.ax.set_ylabel("Singular Value [Amplitude]")
+                self.ax.set_ylim(bottom=0, top=1.05 * y_max)
+
+            self.ax.grid(True)
+            self.ax.legend()
         else:
-            self.ax.set_yscale("linear")
-
-        # self.canvas.mpl_disconnect(self.canvas._cid)
-        # self.canvas._cid = self.canvas.mpl_connect("motion_notify_event", self.on_hover_main)
+            self.ax.set_title("No singular values to display")
 
         self.canvas.draw_idle()
+        
 
 
 
