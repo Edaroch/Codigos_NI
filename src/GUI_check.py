@@ -296,7 +296,7 @@ class CheckGUI:
         self.checkbox_frame.pack_forget()
 
         if self.mosaic_canvas:
-            self.mosaic_canvas.get_tk_widget().destroy()
+            self.root.after(0, lambda: self.mosaic_canvas.get_tk_widget().destroy())
             self.mosaic_canvas = None
 
         f = np.array(self.data["frequencies"])
@@ -412,51 +412,6 @@ class CheckGUI:
 
         self.canvas.draw_idle()
         
-
-
-
-    # def on_hover_main(self, event):
-    #     if not event.inaxes or not self.data:
-    #         self.annotation.set_visible(False)
-    #         self.vline.set_visible(False)
-    #         self.canvas.draw_idle()
-    #         return
-
-    #     closest_line = None
-    #     closest_index = None
-    #     min_dist = float("inf")
-
-    #     for line in self.ax.lines:
-    #         xdata = line.get_xdata()
-    #         ydata = line.get_ydata()
-    #         if len(xdata) == 0:
-    #             continue
-    #         index = np.searchsorted(xdata, event.xdata)
-    #         if 0 <= index < len(xdata):
-    #             dx = xdata[index] - event.xdata
-    #             dy = ydata[index] - event.ydata
-    #             dist = dx**2 + dy**2
-    #             if dist < min_dist:
-    #                 min_dist = dist
-    #                 closest_line = line
-    #                 closest_index = index
-
-    #     if closest_line and closest_index is not None:
-    #         x = closest_line.get_xdata()[closest_index]
-    #         y = closest_line.get_ydata()[closest_index]
-    #         label = closest_line.get_label()
-    #         self.annotation.xy = (x, y)
-    #         self.annotation.set_text(f"{label}\n{float(x):.2f} Hz\n{float(y):.2e}")
-    #         self.annotation.set_visible(True)
-
-    #         self.vline.set_xdata([x, x])
-    #         self.vline.set_visible(True)
-    #         self.canvas.draw_idle()
-    #     else:
-    #         self.annotation.set_visible(False)
-    #         self.vline.set_visible(False)
-    #         self.canvas.draw_idle()
-
     def on_hover_mosaic(self, event):
         if not self.mosaic_ready or not self.mosaic_fig or not event.inaxes:
             for ann in self.annotations:
@@ -489,7 +444,9 @@ class CheckGUI:
 
     def on_closing(self):
         self.running = False
-        self.root.destroy()
+        self.plot_queue.queue.clear()
+        self.plotting_in_progress = False
+        self.root.after(100, self.root.destroy)
 
 
 if __name__ == "__main__":
