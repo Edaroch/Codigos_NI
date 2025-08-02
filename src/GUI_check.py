@@ -9,6 +9,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import numpy as np
 import queue
+import gc
 
 
 class CheckGUI:
@@ -17,7 +18,7 @@ class CheckGUI:
         self.root.title("Data Checking GUI")
 
         self.plot_queue = queue.Queue()
-        self.root.after(100, self.process_plot_queue)
+        self.after_id = self.root.after(100, self.process_plot_queue)
 
         # State
         self.auto_var = tk.BooleanVar()
@@ -148,9 +149,12 @@ class CheckGUI:
 
     def auto_loop(self):
         while self.running:
-            get_last_seconds_from_sqlite(seconds=30)
-            get_PSD_SVD_from_file()
-            self.plot_queue.put("update")
+            try:
+                get_last_seconds_from_sqlite(seconds=30)
+                get_PSD_SVD_from_file()
+                self.plot_queue.put("update")
+            except Exception as e:
+                print(f"[ERROR] Auto loop: {e}")
             time.sleep(5)
 
     def process_plot_queue(self):
@@ -163,7 +167,7 @@ class CheckGUI:
             pass
         finally:
             # vuelve a revisar en 100 ms
-            self.root.after(100, self.process_plot_queue)
+            self.after_id = self.root.after(100, self.process_plot_queue)
 
     def sync_gui_update_if_overlay(self):
         self.load_data()
@@ -187,8 +191,12 @@ class CheckGUI:
         if not os.path.exists("psd_results.json"):
             print("⚠️ psd_results.json not found.")
             return
-        with open("psd_results.json", "r") as f:
-            self.data = json.load(f)
+        try:
+            with open("psd_results.json", "r") as f:
+                self.data = json.load(f)
+        except Exception as e:
+            print(f"[ERROR] Loading data: {e}")
+            self.data = None
 
         # Solo prepara info, luego actualiza widgets desde hilo principal
         self.root.after(0, self.update_sensor_checkboxes)
@@ -210,8 +218,8 @@ class CheckGUI:
             chk.pack(side="left", padx=5)
 
         # 🔁 Redibujar overlay si estamos en esa vista
-        if self.active_view == "overlay":
-            self.plot_psd_overlay()
+        # if self.active_view == "overlay":
+        #     self.plot_psd_overlay()
 
     def update_all_plots(self):
         if not self.data:
@@ -220,18 +228,25 @@ class CheckGUI:
         if self.active_view == "overlay":
             self.plot_psd_overlay()
         elif self.active_view == "mosaic":
-            self.plot_psd_mosaic()
+            self._plot_psd_mosaic()
         elif self.active_view == "svd":
             self.plot_singular_values()
 
-
-    @prevent_if_plotting
     def plot_psd_overlay(self):
         self.clear_plot_queue()
         if not self.data:
             self.load_data()
-            if not self.data:
-                return
+            # defer plotting until after checkboxes are loaded
+            self.root.after(100, self._plot_psd_overlay)
+        else:
+            self._plot_psd_overlay()
+
+    @prevent_if_plotting
+    def _plot_psd_overlay(self):
+        self.clear_plot_queue()
+        if not self.data:
+            print("⚠️ No data available.")
+            return
         self.active_view = "overlay"
 
         self.checkbox_frame.pack(padx=10, pady=5, fill="x")
@@ -269,9 +284,14 @@ class CheckGUI:
             if self.log_scale_var.get():
                 self.ax.set_yscale("log")
                 self.ax.set_ylabel("PSD [dB]")
+                self.ax.set_ylim(
+                    bottom=max(1e-30, np.min([v for v in self.ax.get_lines()[0].get_ydata() if v > 0])),
+                    top=1.05 * ymax
+                )
             else:
                 self.ax.set_yscale("linear")
                 self.ax.set_ylabel("PSD [(m/s²)²/Hz]")
+                self.ax.set_ylim(bottom=0, top=1.05 * ymax)
 
             self.ax.grid(True)
             self.ax.legend()
@@ -280,24 +300,35 @@ class CheckGUI:
 
         self.canvas.draw_idle()
 
-
-
-    @prevent_if_plotting
     def plot_psd_mosaic(self):
         self.clear_plot_queue()
-        self.mosaic_ready = False
+        if self.active_view == "mosaic" and self.mosaic_ready:
+            
+            return
         self.load_data()
+        self.root.after(0, self._plot_psd_mosaic)
+
+    @prevent_if_plotting
+    def _plot_psd_mosaic(self):
+        self.clear_plot_queue()
+        self.mosaic_ready = False
         if not self.data:
+            print("⚠️ No data available.")
             return
 
         self.active_view = "mosaic"
 
+        # Oculta otros elementos
         self.canvas_widget.pack_forget()
         self.checkbox_frame.pack_forget()
 
-        if self.mosaic_canvas:
-            self.root.after(0, lambda: self.mosaic_canvas.get_tk_widget().destroy())
+        # Destruye canvas anterior si existe
+        if self.mosaic_canvas is not None:
+            widget = self.mosaic_canvas.get_tk_widget()
+            widget.pack_forget()
+            widget.destroy()
             self.mosaic_canvas = None
+            gc.collect()
 
         f = np.array(self.data["frequencies"])
         psd = self.data["psd"]
@@ -322,17 +353,20 @@ class CheckGUI:
                 continue
             axs[i].plot(f_arr[mask], v_arr[mask], label=label)
             axs[i].set_xlim([fmin, fmax])
-
             local_max = np.max(v_arr[mask]) if np.any(mask) else 1.0
             axs[i].set_ylim(bottom=0, top=1.05 * local_max)
-
-            if self.log_scale_var.get():
+            positive_values = v_arr[mask][v_arr[mask] > 0]
+            if self.log_scale_var.get() and len(positive_values) > 0:
                 axs[i].set_yscale("log")
                 axs[i].set_ylabel(f"{label}\n[dB]")
+                axs[i].set_ylim(
+                    bottom=max(1e-30, np.min(positive_values)),
+                    top=1.05 * np.max(positive_values)
+                )
             else:
                 axs[i].set_yscale("linear")
                 axs[i].set_ylabel(f"{label}\n[(m/s²)²/Hz]")
-
+                axs[i].set_ylim(bottom=0, top=1.05 * np.max(v_arr[mask]))
             axs[i].grid(True)
 
             ann = axs[i].annotate("", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
@@ -346,18 +380,24 @@ class CheckGUI:
         self.mosaic_fig.tight_layout()
 
         self.mosaic_canvas = FigureCanvasTkAgg(self.mosaic_fig, master=self.plot_frame)
-        self.mosaic_canvas.get_tk_widget().pack(fill="both", expand=True)
         self.mosaic_canvas.draw()
+        self.mosaic_canvas.get_tk_widget().pack(fill="both", expand=True)
         self.mosaic_canvas.mpl_connect("motion_notify_event", self.on_hover_mosaic)
-        plt.close(self.mosaic_fig)
+
         self.mosaic_ready = True
 
+    def plot_singular_values(self):
+        self.clear_plot_queue()
+        if not self.data:
+            self.load_data()
+        return self._plot_singular_values()
 
     @prevent_if_plotting
-    def plot_singular_values(self):
+    def _plot_singular_values(self):
         self.clear_plot_queue()
         self.load_data()
         if not self.data:
+            print("⚠️ No data available.")
             return
 
         self.active_view = "svd"
@@ -444,9 +484,17 @@ class CheckGUI:
 
     def on_closing(self):
         self.running = False
-        self.plot_queue.queue.clear()
         self.plotting_in_progress = False
-        self.root.after(100, self.root.destroy)
+
+        try:
+            if hasattr(self, "after_id"):
+                self.root.after_cancel(self.after_id)
+        except Exception as e:
+            print(f"Warning: Could not cancel after: {e}")
+
+        # Asegurarse de cerrar la ventana
+        self.root.quit()      # Rompe el mainloop
+        self.root.destroy()   # Cierra la ventana
 
 
 if __name__ == "__main__":
