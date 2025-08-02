@@ -39,6 +39,30 @@ def save_config(config):
                 file.write(line)  # Escribir comentarios y líneas vacías sin modificar
 
 
+class SplashScreen:
+    def __init__(self):
+        self.splash = tk.Toplevel()
+        self.splash.overrideredirect(True)
+        self.splash.configure(bg="white")
+        self.splash.geometry("400x120+500+300")
+        self.splash.lift()  # Poner al frente
+        self.splash.attributes("-topmost", True)  # Siempre encima
+
+        label = tk.Label(self.splash, text="Loading GUI...", font=("Helvetica", 14), bg="white")
+        label.pack(pady=10)
+
+        self.progress = ttk.Progressbar(self.splash, mode='indeterminate', length=300)
+        self.progress.pack(pady=10)
+        self.progress.start()
+
+        # Forzar render inmediato
+        self.splash.update()
+
+    def close(self):
+        self.progress.stop()
+        self.splash.destroy()
+
+
 class ToolTip:
     def __init__(self, widget, text):
         self.widget = widget
@@ -213,27 +237,31 @@ class AcquisitionGUI:
             print(f"Error deleting the backup: {e}")
 
     def create_scrollable_panel(self):
-        """Creates a scrollable panel for configurations with a fixed width"""
-        # Establecer el ancho fijo que deseas para el canvas
-        fixed_width = 400  # Por ejemplo, un ancho fijo de 300 píxeles
+        """Creates a scrollable panel for configurations with adaptive height."""
 
-        canvas = tk.Canvas(self.root, width=fixed_width)  # Fijar el ancho del canvas
-        scroll_y = tk.Scrollbar(self.root, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas)
+        container = tk.Frame(self.root)
+        container.pack(side="left", fill=tk.BOTH, expand=True)
 
-        scrollable_frame.bind(
+        canvas = tk.Canvas(container)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = tk.Frame(canvas)
+
+        self.scrollable_frame.bind(
             "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
         )
 
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scroll_y.set)
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind_all("<MouseWheel>", lambda event: canvas.yview_scroll(-1 * (event.delta // 120), "units"))
 
-        # Ajustar el canvas y el scrollbar
-        canvas.pack(side="left", fill=tk.Y)  # Aquí solo usamos fill=tk.Y para que el ancho sea fijo
-        scroll_y.pack(side="right", fill=tk.Y)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
-        self.create_setup_panel(scrollable_frame)
+        self.create_setup_panel(self.scrollable_frame)
+
 
     def create_setup_panel(self, parent):
         """Creates the configuration panel content with proper alignment."""
@@ -676,6 +704,18 @@ class AcquisitionGUI:
         check_button.grid(row=0, column=5, padx=10)
 
 if __name__ == "__main__":
+    import time
+
     root = tk.Tk()
-    app = AcquisitionGUI(root)
+    root.withdraw()  # Oculta la ventana principal
+
+    splash = SplashScreen()  # Mostrar el splash inmediatamente
+
+    def load_gui():
+        app = AcquisitionGUI(root)  # Carga completa aquí
+        splash.close()
+        root.deiconify()  # Mostrar la GUI principal
+
+    # Ejecutar carga después de 100 ms (deja que el splash se renderice bien)
+    root.after(100, load_gui)
     root.mainloop()
