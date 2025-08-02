@@ -120,6 +120,28 @@ class CheckGUI:
         # self.vline.set_visible(False)
 
         self.active_view = "overlay"
+        self.pending_overlay_plot = False
+        self.sensor_checkboxes_ready = False
+
+    def init_mosaic_layout(self):
+        if self.mosaic_canvas is not None:
+            return  # Ya está inicializado
+
+        psd = self.data["psd"]
+        f = np.array(self.data["frequencies"])
+        num = len(psd)
+
+        self.mosaic_fig, axs = plt.subplots(num, 1, figsize=(8, 2.5 * num), sharex=True)
+        if num == 1:
+            axs = [axs]
+        self.mosaic_axes = axs
+
+        self.mosaic_canvas = FigureCanvasTkAgg(self.mosaic_fig, master=self.plot_frame)
+        self.mosaic_canvas.get_tk_widget().pack(fill="both", expand=True)
+        self.mosaic_canvas.draw_idle()
+        self.mosaic_canvas.mpl_connect("motion_notify_event", self.on_hover_mosaic)
+        self.mosaic_fig.suptitle("PSD Mosaic")
+        self.mosaic_fig.tight_layout()
 
     def prevent_if_plotting(func):
         def wrapper(self, *args, **kwargs):
@@ -142,19 +164,26 @@ class CheckGUI:
     def toggle_auto(self):
         if self.auto_var.get():
             self.running = True
+            self.check_button.config(state='disabled')  # 🔒 Desactiva botón "Plot Once"
             threading.Thread(target=self.auto_loop, daemon=True).start()
         else:
             self.running = False
+            self.check_button.config(state='normal')  # 🔓 Reactiva botón "Plot Once"
+
 
     def auto_loop(self):
         while self.running:
+            start_time = time.time()
             try:
                 get_last_seconds_from_sqlite(seconds=30)
                 get_PSD_SVD_from_file()
                 self.plot_queue.put("update")
             except Exception as e:
                 print(f"[ERROR] Auto loop: {e}")
-            time.sleep(5)
+            elapsed = time.time() - start_time
+            sleep_time = max(1.0, elapsed + 1.0)
+            time.sleep(sleep_time)
+
 
     def process_plot_queue(self):
         try:
@@ -197,13 +226,12 @@ class CheckGUI:
             print(f"[ERROR] Loading data: {e}")
             self.data = None
 
-        # Solo prepara info, luego actualiza widgets desde hilo principal
-        self.root.after(0, self.update_sensor_checkboxes)
+        # Esperar 150 ms antes de cargar los sensores (evita que aparezca vacío)
+        self.root.after(150, self.update_sensor_checkboxes)
+
 
     def update_sensor_checkboxes(self):
-        previous_states = {
-            k: v.get() for k, v in self.channel_vars.items()
-        }
+        previous_states = {k: v.get() for k, v in self.channel_vars.items()}
 
         self.channel_vars.clear()
         for widget in self.checkbox_frame.winfo_children():
@@ -216,9 +244,13 @@ class CheckGUI:
                                 command=self.plot_psd_overlay)
             chk.pack(side="left", padx=5)
 
-        # 🔁 Redibujar overlay si estamos en esa vista
-        # if self.active_view == "overlay":
-        #     self.plot_psd_overlay()
+        self.sensor_checkboxes_ready = True
+
+        # Si el usuario pidió overlay, y los sensores ya están listos, hacer el plot
+        if self.active_view == "overlay" and self.pending_overlay_plot:
+            self.pending_overlay_plot = False
+            self._plot_psd_overlay()
+
 
     def update_all_plots(self):
         if not self.data:
@@ -235,10 +267,15 @@ class CheckGUI:
         self.clear_plot_queue()
         if not self.data:
             self.load_data()
-            # defer plotting until after checkboxes are loaded
-            self.root.after(100, self._plot_psd_overlay)
-        else:
-            self._plot_psd_overlay()
+            self.pending_overlay_plot = True
+            return
+
+        # Si los sensores aún no están listos, esperar y marcar que hay un overlay pendiente
+        if not self.sensor_checkboxes_ready:
+            self.pending_overlay_plot = True
+            return
+
+        self._plot_psd_overlay()
 
     @prevent_if_plotting
     def _plot_psd_overlay(self):
@@ -321,21 +358,9 @@ class CheckGUI:
         self.canvas_widget.pack_forget()
         self.checkbox_frame.pack_forget()
 
-        # Destruye canvas anterior si existe
-        if self.mosaic_canvas is not None:
-            widget = self.mosaic_canvas.get_tk_widget()
-            widget.pack_forget()
-            widget.destroy()
-            self.mosaic_canvas = None
-            gc.collect()
-
         f = np.array(self.data["frequencies"])
         psd = self.data["psd"]
         num = len(psd)
-
-        self.mosaic_fig, axs = plt.subplots(num, 1, figsize=(8, 2.5 * num), sharex=True)
-        if num == 1:
-            axs = [axs]
 
         try:
             fmin = self.freq_min_var.get()
@@ -344,46 +369,73 @@ class CheckGUI:
             fmin, fmax = 0, np.max(f)
 
         self.annotations = []
+
+        # Crear layout solo una vez
+        if self.mosaic_canvas is None or not hasattr(self, "mosaic_axes") or len(self.mosaic_axes) != num:
+            if self.mosaic_canvas:
+                self.mosaic_canvas.get_tk_widget().pack_forget()
+                # self.mosaic_canvas.get_tk_widget().destroy()
+                # self.mosaic_canvas = None
+                gc.collect()
+
+            self.mosaic_fig, axs = plt.subplots(num, 1, figsize=(8, 2.5 * num), sharex=True)
+            if num == 1:
+                axs = [axs]
+            self.mosaic_axes = axs
+
+            self.mosaic_canvas = FigureCanvasTkAgg(self.mosaic_fig, master=self.plot_frame)
+            self.mosaic_canvas.get_tk_widget().pack(fill="both", expand=True)
+            self.mosaic_canvas.draw_idle()
+            self.mosaic_canvas.mpl_connect("motion_notify_event", self.on_hover_mosaic)
+            self.mosaic_fig.suptitle("PSD Mosaic")
+            self.mosaic_fig.tight_layout()
+        else:
+            axs = self.mosaic_axes
+
+        # Redibujar datos
+        for ax in axs:
+            ax.clear()
+
         for i, (label, values) in enumerate(psd.items()):
+            ax = axs[i]
             f_arr = np.array(f)
             v_arr = np.array(values)
             mask = (f_arr >= fmin) & (f_arr <= fmax)
             if not np.any(mask):
                 continue
-            axs[i].plot(f_arr[mask], v_arr[mask], label=label)
-            axs[i].set_xlim([fmin, fmax])
+
+            ax.plot(f_arr[mask], v_arr[mask], label=label)
+            ax.set_xlim([fmin, fmax])
             local_max = np.max(v_arr[mask]) if np.any(mask) else 1.0
-            axs[i].set_ylim(bottom=0, top=1.05 * local_max)
+
             positive_values = v_arr[mask][v_arr[mask] > 0]
             if self.log_scale_var.get() and len(positive_values) > 0:
-                axs[i].set_yscale("log")
-                axs[i].set_ylabel(f"{label}\n[dB]")
-                axs[i].set_ylim(
+                ax.set_yscale("log")
+                ax.set_ylabel(f"{label}\n[dB]")
+                ax.set_ylim(
                     bottom=max(1e-30, np.min(positive_values)),
                     top=1.05 * np.max(positive_values)
                 )
             else:
-                axs[i].set_yscale("linear")
-                axs[i].set_ylabel(f"{label}\n[(m/s²)²/Hz]")
-                axs[i].set_ylim(bottom=0, top=1.05 * np.max(v_arr[mask]))
-            axs[i].grid(True)
+                ax.set_yscale("linear")
+                ax.set_ylabel(f"{label}\n[(m/s²)²/Hz]")
+                ax.set_ylim(bottom=0, top=1.05 * local_max)
 
-            ann = axs[i].annotate("", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
-                                bbox=dict(boxstyle="round", fc="w"),
-                                arrowprops=dict(arrowstyle="->"))
+            ax.grid(True)
+
+            ann = ax.annotate("", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
+                            bbox=dict(boxstyle="round", fc="w"),
+                            arrowprops=dict(arrowstyle="->"))
             ann.set_visible(False)
             self.annotations.append(ann)
 
         axs[-1].set_xlabel("Frequency [Hz]")
-        self.mosaic_fig.suptitle("PSD Mosaic")
-        self.mosaic_fig.tight_layout()
-
-        self.mosaic_canvas = FigureCanvasTkAgg(self.mosaic_fig, master=self.plot_frame)
-        self.mosaic_canvas.draw()
-        self.mosaic_canvas.get_tk_widget().pack(fill="both", expand=True)
-        self.mosaic_canvas.mpl_connect("motion_notify_event", self.on_hover_mosaic)
-
+        widget = self.mosaic_canvas.get_tk_widget()
+        if not widget.winfo_ismapped():
+            widget.pack(fill="both", expand=True)
+        self.mosaic_canvas.draw_idle()
         self.mosaic_ready = True
+
 
     def plot_singular_values(self):
         self.clear_plot_queue()
