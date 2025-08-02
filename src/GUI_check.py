@@ -137,8 +137,7 @@ class CheckGUI:
         get_last_seconds_from_sqlite(seconds=30)
         get_PSD_SVD_from_file()
         self.load_data()
-        if self.auto_var.get():
-            self.plot_psd_overlay()
+        self.update_all_plots()
 
     def toggle_auto(self):
         if self.auto_var.get():
