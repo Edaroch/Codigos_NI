@@ -11,6 +11,29 @@ import numpy as np
 import queue
 import gc
 
+class SplashScreen:
+    def __init__(self):
+        self.splash = tk.Toplevel()
+        self.splash.overrideredirect(True)
+        self.splash.configure(bg="white")
+        self.splash.geometry("400x120+500+300")
+        self.splash.lift()  # Poner al frente
+        self.splash.attributes("-topmost", True)  # Siempre encima
+
+        label = tk.Label(self.splash, text="Loading CHECK GUI...", font=("Helvetica", 14), bg="white")
+        label.pack(pady=10)
+
+        self.progress = ttk.Progressbar(self.splash, mode='indeterminate', length=300)
+        self.progress.pack(pady=10)
+        self.progress.start()
+
+        # Forzar render inmediato
+        self.splash.update()
+
+    def close(self):
+        self.progress.stop()
+        self.splash.destroy()
+
 
 class CheckGUI:
     def __init__(self, root):
@@ -548,8 +571,25 @@ class CheckGUI:
         self.root.destroy()   # Cierra la ventana
 
 
+# if __name__ == "__main__":
+#     root = tk.Tk()
+#     app = CheckGUI(root)
+#     root.protocol("WM_DELETE_WINDOW", app.on_closing)
+#     root.mainloop()
+
 if __name__ == "__main__":
     root = tk.Tk()
-    app = CheckGUI(root)
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    root.withdraw()  # Oculta la ventana principal
+
+    splash = SplashScreen()  # Mostrar el splash inmediatamente
+
+    def load_gui():
+        app = CheckGUI(root)  # Carga completa aquí
+        splash.close()
+        root.deiconify()  # Mostrar la GUI principal
+        root.protocol("WM_DELETE_WINDOW", app.on_closing)
+
+    # Ejecutar carga después de 100 ms (deja que el splash se renderice bien)
+    root.after(100, load_gui)
+    
     root.mainloop()
