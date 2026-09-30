@@ -1,6 +1,6 @@
 import time
-from threading import Thread, Event  # threading.Event para el manejo de hilos
-from multiprocessing import Event as MPEvent  # multiprocessing.Event para procesos
+from threading import Thread, Event  # threading.Event to control threads
+from multiprocessing import Event as MPEvent  # multiprocessing.Event to control processes
 import os
 
 from data_acquisition import run_data_acquisition

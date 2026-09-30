@@ -12,7 +12,7 @@ import time
 from multiprocessing import Process, Queue
 from capture_data import capture_data
 from process_data import process_data
-from data_handling import backup_data  # Importar la función para manejar el buffer y la base de datos
+from data_handling import backup_data  # Buffer and database handling
 from setup_database import close_mongodb_client
 
 def run_data_acquisition(deviceName, total_capture_time, original_rate, decimation_factor, 
@@ -24,28 +24,28 @@ def run_data_acquisition(deviceName, total_capture_time, original_rate, decimati
     """
     start_time = time.time()
     data_queue = Queue()
-    persistent_buffer = []  # Buffer persistente para datos excedentes
+    persistent_buffer = []  # Persistent buffer for leftover data
 
-    # Proceso para capturar datos del DAQ
+    # Process that captures data from the DAQ
     capture_process = Process(target=capture_data, args=(
         data_queue, stop_event, deviceName, total_capture_time, original_rate, 
         min_val, max_val, sensitivity, buffer_size, sensor_numbers, sensor_numbers_all, config))
     
-    # Proceso para procesar los datos capturados
+    # Process that handles the captured data
     processing_process = Process(target=process_data, args=(
         data_queue, stop_event, total_capture_time, original_rate, decimation_factor, 
         sensor_numbers, sqlite_db_path, config, buffer_size))
 
     backup_process = Process(target=backup_data, args=(
-        db_config,              # Configuración de MongoDB
-        sqlite_db_path,         # Ruta a la base de datos SQLite (buffer)
-        db_config["db_backup_name"],  # Nombre de la base de datos MongoDB raw
-        config,                 # Configuración general
-        sensor_numbers,         # Números de sensores
-        stop_event,             # Evento de parada
-        config["backup_time"],   # Tiempo de respaldo (en segundos)
-        persistent_buffer,  # Buffer persistente para datos excedentes
-        total_capture_time  # Tiempo total de captura
+        db_config,              # MongoDB configuration
+        sqlite_db_path,         # Path to the SQLite database (buffer)
+        db_config["db_backup_name"],  # Name of the raw MongoDB database
+        config,                 # General configuration
+        sensor_numbers,         # Sensor numbers
+        stop_event,             # Stop event
+        config["backup_time"],   # Backup interval, in seconds
+        persistent_buffer,  # Persistent buffer for leftover data
+        total_capture_time  # Total capture time
     ))
 
     capture_process.start()
@@ -54,26 +54,26 @@ def run_data_acquisition(deviceName, total_capture_time, original_rate, decimati
 
     if restart_time_in_seconds > 0:
         print(f"Waiting {restart_time_in_seconds} seconds to restart data acquisition or press ENTER to stop.")
-        stop_event.wait(timeout=restart_time_in_seconds)  # Detener tras el tiempo de reinicio o por ENTER
+        stop_event.wait(timeout=restart_time_in_seconds)  # Stop after the restart interval, or when ENTER is pressed
     else:
-        input("Press ENTER to stop.")  # Si el restart_time es 0, esperar manualmente por ENTER
+        input("Press ENTER to stop.")  # If restart_time is 0, wait for ENTER
 
-    stop_event.set()  # Detener todos los procesos
+    stop_event.set()  # Stop every process
 
-    # Unir los procesos para asegurar que finalicen correctamente
+    # Join the processes so they finish cleanly
     capture_process.join(timeout=1)
     processing_process.join(timeout=1)
     backup_process.join(timeout=1)
     
-    close_mongodb_client()  # Cerrar el cliente MongoDB
+    close_mongodb_client()  # Close the MongoDB client
 
     if capture_process.is_alive() or processing_process.is_alive() or backup_process.is_alive():
         capture_process.terminate()
         processing_process.terminate()
         backup_process.terminate()
-        close_mongodb_client()  # Cerrar el cliente MongoDB
+        close_mongodb_client()  # Close the MongoDB client
     end_time = time.time()
     print(f"All processes have finished. {end_time}, total time {end_time - start_time}.")
 
 if __name__ == "__main__":
-    pass  # Este archivo no está destinado a ejecutarse directamente
+    pass  # This file is not meant to be run directly

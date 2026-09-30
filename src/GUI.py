@@ -28,15 +28,15 @@ def save_config(config):
                     value = config[key]
                     if key == 'debug':
                         value = 'true' if value else 'false'
-                    # Mantener comentario original y escribir sin agregar espacios adicionales
+                    # Keep the original comment, without adding extra spaces
                     if '#' in line:
-                        file.write(f"{key}: {value} {line[line.index('#'):]}")  # Mantener el comentario
+                        file.write(f"{key}: {value} {line[line.index('#'):]}")  # Keep the comment
                     else:
                         file.write(f"{key}: {value}\n")
                 else:
-                    file.write(line)  # Mantener la línea tal como está si no es clave conocida
+                    file.write(line)  # Leave the line untouched if the key is not a known one
             else:
-                file.write(line)  # Escribir comentarios y líneas vacías sin modificar
+                file.write(line)  # Write comments and blank lines unchanged
 
 
 class SplashScreen:
@@ -45,8 +45,8 @@ class SplashScreen:
         self.splash.overrideredirect(True)
         self.splash.configure(bg="white")
         self.splash.geometry("400x120+500+300")
-        self.splash.lift()  # Poner al frente
-        self.splash.attributes("-topmost", True)  # Siempre encima
+        self.splash.lift()  # Bring to the front
+        self.splash.attributes("-topmost", True)  # Always on top
 
         label = tk.Label(self.splash, text="Loading GUI...", font=("Helvetica", 14), bg="white")
         label.pack(pady=10)
@@ -55,7 +55,7 @@ class SplashScreen:
         self.progress.pack(pady=10)
         self.progress.start()
 
-        # Forzar render inmediato
+        # Force an immediate render
         self.splash.update()
 
     def close(self):
@@ -72,19 +72,19 @@ class ToolTip:
         self.widget.bind("<Leave>", self.hide_tooltip)
 
     def show_tooltip(self, event):
-        # Crear la ventana emergente para el tooltip
-        x, y, _, _ = self.widget.bbox("insert")  # Obtener la posición del widget
-        x += self.widget.winfo_rootx() + 20  # Desplazar el tooltip ligeramente a la derecha
-        y += self.widget.winfo_rooty() + 20  # Desplazar el tooltip ligeramente hacia abajo
+        # Create the tooltip window
+        x, y, _, _ = self.widget.bbox("insert")  # Get the position of the widget
+        x += self.widget.winfo_rootx() + 20  # Shift the tooltip slightly to the right
+        y += self.widget.winfo_rooty() + 20  # Shift the tooltip slightly down
 
         self.tooltip = tk.Toplevel(self.widget)
-        self.tooltip.wm_overrideredirect(True)  # Sin bordes
+        self.tooltip.wm_overrideredirect(True)  # No border
         self.tooltip.wm_geometry(f"+{x}+{y}")
         label = tk.Label(self.tooltip, text=self.text, background="White", relief="solid", borderwidth=1)
         label.pack()
 
     def hide_tooltip(self, event):
-        # Cerrar la ventana del tooltip
+        # Close the tooltip window
         if self.tooltip:
             self.tooltip.destroy()
             self.tooltip = None
@@ -96,18 +96,18 @@ class AcquisitionGUI:
         self.root = root
         self.root.title("Data Acquisition Control Panel")
         self.root.state('zoomed')
-        self.auto_update = False  # Flag para autoactualización
-        self.main_process = None  # Almacena el proceso main.py
+        self.auto_update = False  # Auto-refresh flag
+        self.main_process = None  # Holds the main.py process
         self.acquisition_running = False
         
 
-        # Realizar copia de seguridad del archivo SETUP.txt
+        # Back up the SETUP.txt file
         self.backup_setup_file()
 
-        # Cargar la configuración actual de SETUP.txt
+        # Load the current configuration from SETUP.txt
         self.config = load_config()
 
-        # Variables para organizar las secciones del archivo
+        # Groups used to lay out the sections of the file
         self.sections = {
             "CAPTURE SETUP": ["total_capture_time", "restart_time", "debug"],
             "DAQ SETUP": [
@@ -119,7 +119,7 @@ class AcquisitionGUI:
             "BACKUP DATABASE SETUP (MongoDB)": ["backup_time", "db_host", "db_port", "db_backup_name"]
         }
 
-        # Explicaciones de las variables
+        # Per-parameter explanations
         self.explanations = {
             "deviceName": "Name of the data acquisition device. Check in NI-MAX for the name, e.g., cDAQ9185-21DAXXX",
             "total_capture_time": "Total capture time in seconds (0 for continuous capture).",
@@ -163,20 +163,20 @@ class AcquisitionGUI:
             ]
         }
         
-        # Variables de entrada de los parámetros
+        # Entry widgets for the parameters
         self.entries = {}
 
-        # Variable para rastrear si los datos fueron actualizados
+        # Tracks whether the data was modified
         self.is_updated = False
 
-        # Diccionario para almacenar los checkboxes dinámicos de sensores
+        # Holds the dynamic sensor checkboxes
         self.sensor_selection = {}  
 
 
-        # Crear el panel principal con scrollbar
+        # Build the main panel, with a scrollbar
         self.create_scrollable_panel()
 
-        # Consola de salida
+        # Output console
         self.console_output = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, width=200, height=15)
         self.console_output.pack(pady=10)
         self.update_console(
@@ -194,16 +194,16 @@ class AcquisitionGUI:
 '''
         )
 
-        # Gráfico bajo la consola de salida
+        # Plot, below the output console
         self.create_plot_panel()
 
-        # Botones de control
+        # Control buttons
         self.create_control_buttons()
 
-        # Manejar evento de cierre de ventana
+        # Handle the window-close event
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        # Verificar si existe la base de datos
+        # Check whether the database exists
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path or not os.path.exists(db_path):
             self.update_console("Database not found at the specified path. Some functions will be disabled.")
@@ -214,7 +214,7 @@ class AcquisitionGUI:
         """Creates a backup of the SETUP.txt file"""
         try:
             shutil.copyfile('SETUP.txt', 'setupbak.txt')
-            # print("Copia de seguridad de SETUP.txt creada.")
+            # print("Backup of SETUP.txt created.")
         except Exception as e:
             print(f"Error creating the backup: {e}")
 
@@ -232,7 +232,7 @@ class AcquisitionGUI:
         """Deletes the backup of the SETUP.txt file"""
         try:
             os.remove('setupbak.txt')
-            # print("Copia de seguridad eliminada.")
+            # print("Backup deleted.")
         except Exception as e:
             print(f"Error deleting the backup: {e}")
 
@@ -266,15 +266,15 @@ class AcquisitionGUI:
     def create_setup_panel(self, parent):
         """Creates the configuration panel content with proper alignment."""
         for section, keys in self.sections.items():
-            # Etiqueta del título de la sección (centrado)
+            # Section title label, centred
             section_label = tk.Label(parent, text=section, font=("Helvetica", 9, "bold"))
             section_label.pack(pady=5)
 
-            # Marco para las filas dentro de la sección
+            # Frame holding the rows of the section
             section_frame = tk.Frame(parent)
             section_frame.pack(pady=5, fill=tk.X)
 
-            row_offset = 0  # Controla las filas adicionales
+            row_offset = 0  # Tracks the extra rows
 
             for row, key in enumerate(keys):
                 value = self.config.get(key, "")
@@ -289,7 +289,7 @@ class AcquisitionGUI:
                 entry = tk.Entry(section_frame, width=20)
                 entry.insert(0, str(value))
 
-                # Deshabilita si está en la lista de campos bloqueados
+                # Disable it if the field is in the locked list
                 if key in self.locked_fields and self.locked_fields[key]:
                     entry.config(state='readonly')
 
@@ -301,7 +301,7 @@ class AcquisitionGUI:
                 description_text = self.explanations.get(key, "No description available")
                 ToolTip(variable_label, description_text)
 
-                # Botón de candado si aplica
+                # Lock button, where it applies
                 if key in self.locked_fields:
                     lock_button = tk.Button(
                         section_frame,
@@ -312,9 +312,9 @@ class AcquisitionGUI:
                     lock_button.config(command=lambda k=key, e=entry, b=lock_button: self.toggle_lock(k, e, b))
                     lock_button.grid(row=row + row_offset, column=2, padx=5)
 
-                # Si es decimation_factor, añadir campo extra de frecuencia debajo
+                # For decimation_factor, add an extra frequency field underneath
                 if key == "decimation_factor":
-                    row_offset += 1  # Saltar una fila para el nuevo campo
+                    row_offset += 1  # Skip a row for the new field
 
                     freq_label = tk.Label(section_frame, text="frequency_rate", anchor="w", width=20)
                     freq_label.grid(row=row + row_offset, column=0, padx=10, pady=5, sticky="w")
@@ -325,7 +325,7 @@ class AcquisitionGUI:
                     freq_combo['values'] = ["10 Hz", "20 Hz", "50 Hz", "75 Hz", "100 Hz", "150 Hz", "200 Hz", "250 Hz", "300 Hz", "400 Hz"]
                     freq_combo.grid(row=row + row_offset, column=1, padx=10, pady=5, sticky="w")
 
-                    # Función para actualizar decimation desde frecuencia
+                    # Update the decimation factor from the frequency
                     def on_freq_selected(event, entry=entry, freq_var=freq_var):
                         try:
                             original_rate = int(self.entries["original_rate"].get())
@@ -339,7 +339,7 @@ class AcquisitionGUI:
                         except Exception as e:
                             print(f"Error updating decimation from frequency: {e}")
 
-                    # Función para actualizar frecuencia desde decimation
+                    # Update the frequency from the decimation factor
                     def on_decimation_changed(event=None, entry=entry, freq_var=freq_var):
                         try:
                             original_rate = int(self.entries["original_rate"].get())
@@ -374,27 +374,27 @@ class AcquisitionGUI:
         plot_frame = tk.Frame(self.root)
         plot_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # Crear sub-marco para botones y actualización automática
+        # Sub-frame for the buttons and the auto-refresh checkbox
         button_frame = tk.Frame(plot_frame)
         button_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
 
-        # Checkbox para autoactualización
+        # Auto-refresh checkbox
         self.auto_update_var = tk.IntVar()
         tk.Checkbutton(
             button_frame, text="Auto-update", variable=self.auto_update_var, command=self.toggle_auto_update
         ).pack(side=tk.LEFT, padx=5)
 
-        # Botón para actualizar el gráfico manualmente
+        # Button that refreshes the plot manually
         tk.Button(button_frame, text="Plot Once", command=self.update_plot).pack(side=tk.LEFT, padx=5)
 
-        # Botón para consultar nuevamente la base de datos
+        # Button that queries the database again
         tk.Button(button_frame, text="Find Sensors", command=self.update_sensor_checkboxes).pack(side=tk.LEFT, padx=5)
 
-        # Cuadro para mostrar el desfase de tiempo
+        # Box showing the time lag
         self.time_lag_label = tk.Label(button_frame, text="Time Lag: 0.00s", width=20, anchor="w", relief=tk.SUNKEN)
         self.time_lag_label.pack(side=tk.LEFT, padx=5)
 
-        # Crear el gráfico inicial
+        # Build the initial plot
         self.figure = plt.Figure(figsize=(10, 2), dpi=100)
         self.ax = self.figure.add_subplot(111)
         self.ax.set_title('Last 20 seconds of recorded data')
@@ -402,26 +402,26 @@ class AcquisitionGUI:
         self.ax.set_ylabel('Acceleration (m/s²)')
         self.ax.grid(True)
 
-        # Contenedor para el gráfico
+        # Container for the plot
         graph_frame = tk.Frame(plot_frame)
         graph_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         self.canvas = FigureCanvasTkAgg(self.figure, master=graph_frame)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=(0, 0))
 
-        # Panel para checkboxes dinámicos de sensores
+        # Panel holding the dynamic sensor checkboxes
         self.checkbox_frame = tk.Frame(plot_frame)
         self.checkbox_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 
-        # Crear checkboxes dinámicos basados en los sensores detectados
+        # Build the checkboxes from the sensors that were detected
         self.update_sensor_checkboxes()
 
     def update_sensor_checkboxes(self):
         """Updates the checkboxes to reflect the sensors detected in the database."""
-        # Guardar estados previos de los sensores
+        # Remember the previous state of each sensor
         previous_states = {sensor: var.get() for sensor, var in self.sensor_selection.items()}
 
-        # Detectar ruta de la base de datos desde la configuración
+        # Read the database path from the configuration
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path or not os.path.exists(db_path):
             self.update_console("Error: Database not found at the specified path.")
@@ -432,7 +432,7 @@ class AcquisitionGUI:
             with sqlite3.connect(db_path) as conn:
                 conn.execute("PRAGMA journal_mode=WAL;")
 
-                # Comprobar si existen las tablas necesarias
+                # Check that the required tables exist
                 query_tables = "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sensors', 'accelerations', 'timestamps')"
                 existing_tables = [row[0] for row in conn.execute(query_tables).fetchall()]
                 required_tables = {'sensors', 'accelerations', 'timestamps'}
@@ -442,7 +442,7 @@ class AcquisitionGUI:
                     self.disable_checkboxes()
                     return
 
-                # Obtener sensores de los últimos 20 segundos
+                # Get the sensors seen in the last 20 seconds
                 query = """
                     SELECT DISTINCT s.sensor_number
                     FROM sensors s
@@ -457,23 +457,23 @@ class AcquisitionGUI:
                 self.disable_checkboxes()
                 return
 
-            # Verificar si la cantidad de sensores ha cambiado
+            # Check whether the number of sensors changed
             if len(sensor_numbers) == len(self.sensor_selection) and all(sensor in self.sensor_selection for sensor in sensor_numbers):
-                # Si no hay cambios en la cantidad de sensores, no hacer el refresh
+                # Nothing changed, so there is no need to refresh
                 return
 
-            # Limpiar el diccionario y eliminar widgets si hay cambios
+            # Clear the dictionary and drop the widgets when something changed
             self.sensor_selection.clear()
             for widget in self.checkbox_frame.winfo_children():
                 widget.destroy()
 
-            # Crear checkboxes dinámicos organizados por columna y fila
+            # Lay the checkboxes out by column and row
             for sensor in sensor_numbers:
-                # Calcular columna y fila según el esquema
-                col = int(str(sensor)[0])  # Primer dígito para columna
-                row = int(str(sensor)[1])  # Segundo dígito para fila
+                # Column and row follow the sensor numbering
+                col = int(str(sensor)[0])  # First digit gives the column
+                row = int(str(sensor)[1])  # Second digit gives the row
 
-                # Restaurar estado previo si existe, sino por defecto True
+                # Restore the previous state if there is one, otherwise default to True
                 state = previous_states.get(sensor, True)
                 var = tk.BooleanVar(value=state)
                 chk = tk.Checkbutton(self.checkbox_frame, text=f"Sensor {sensor}", variable=var)
@@ -485,7 +485,7 @@ class AcquisitionGUI:
             self.disable_checkboxes()
 
     def disable_checkboxes(self):
-        """Desactiva los checkboxes y muestra un mensaje en la interfaz."""
+        """Disables the checkboxes and shows a message in the interface."""
         self.sensor_selection.clear()
         for widget in self.checkbox_frame.winfo_children():
             widget.destroy()
@@ -493,27 +493,27 @@ class AcquisitionGUI:
 
     def load_last_20_seconds(self):
         """
-        Carga los datos de los últimos 20 segundos registrados desde SQLite.
-        Solo carga los datos de los sensores seleccionados.
+        Loads the last 20 seconds of recorded data from SQLite.
+        Only the selected sensors are loaded.
         """
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path or not os.path.exists(db_path):
             self.update_console("No database found at the specified path. Plot not updated.")
             return pd.DataFrame()
 
-        # Obtener sensores seleccionados
+        # Get the selected sensors
         selected_sensors = [sensor for sensor, var in self.sensor_selection.items() if var.get()]
 
         try:
             with sqlite3.connect(db_path) as conn:
                 conn.execute("PRAGMA journal_mode=WAL;")
-                # Obtener el último timestamp registrado
+                # Get the most recent timestamp
                 query_max = "SELECT MAX(timestamp) as max_time FROM timestamps"
                 max_time = pd.read_sql_query(query_max, conn)['max_time'].iloc[0]
                 if max_time is None:
-                    return pd.DataFrame()  # Si no hay datos, retornar vacío
+                    return pd.DataFrame()  # No data, so return an empty frame
                 end_timestamp = max_time
-                start_timestamp = end_timestamp - 20  # Últimos 20 segundos
+                start_timestamp = end_timestamp - 20  # Last 20 seconds
 
                 query = f"""
                     SELECT t.timestamp, s.sensor_number, a.acceleration_value
@@ -525,7 +525,7 @@ class AcquisitionGUI:
                 """
                 df = pd.read_sql_query(query, conn, params=(start_timestamp, end_timestamp, *selected_sensors))
         except Exception as e:
-            self.update_console(f"Error al cargar datos desde la base de datos: {e}")
+            self.update_console(f"Error loading data from the database: {e}")
             return pd.DataFrame()
 
         if not df.empty:
@@ -537,11 +537,11 @@ class AcquisitionGUI:
         """
         Updates the plot with the last 20 seconds of recorded data.
         """
-        # Verificar si hay una base de datos antes de actualizar el gráfico
+        # Check that a database exists before refreshing the plot
         db_path = self.config.get("sqlite_db_path", "")
         if not db_path or not os.path.exists(db_path):
             self.update_console("No database found at the specified path. Plot not updated.")
-            self.auto_update_var.set(0)  # Desactivar la actualización automática
+            self.auto_update_var.set(0)  # Turn the auto-refresh off
             return
 
         df = self.load_last_20_seconds()
@@ -558,7 +558,7 @@ class AcquisitionGUI:
 
             self.ax.legend(loc='upper right')
 
-            # Calcular desfase entre el último timestamp y el tiempo actual
+            # Lag between the last timestamp and the current time
             last_timestamp = df['timestamp'].max()
             last_timestamp = pd.to_datetime(last_timestamp)
             if last_timestamp.tzinfo is None:
@@ -568,11 +568,11 @@ class AcquisitionGUI:
 
             time_lag = (current_time - last_timestamp).total_seconds()
 
-            # Actualizar el cuadro de desfase
+            # Refresh the lag box
             self.time_lag_label.config(text=f"Time Lag: {time_lag:.2f}s")
 
         else:
-            # Si no hay datos, establecer desfase a 0
+            # No data, so report a lag of 0
             self.time_lag_label.config(text="Time Lag: 0.00s")
 
         self.canvas.draw()
@@ -597,10 +597,10 @@ class AcquisitionGUI:
             messagebox.showinfo("Already Running", "An acquisition process is already running.")
             return
 
-        # Guardar la configuración actualizada
+        # Save the updated configuration
         self.update_config()
 
-        # Ejecutar main.py en un nuevo cmd
+        # Run main.py in a new console window
         self.update_console("Running main.py in a new console window...")
         if os.name == 'nt':  # Windows
             subprocess.Popen(['start', 'cmd', '/c', 'python', 'src/main.py'], shell=True)
@@ -610,15 +610,15 @@ class AcquisitionGUI:
         self.acquisition_running = True
         self.update_console("Acquisition running. Press 'Stop Acquisition' button to stop the acquisition process.")
 
-        # Desactivar botón Run Acquisition si está disponible
+        # Disable the Run Acquisition button while the process is alive
         self.execute_button.config(state="disabled")
 
 
     def update_console(self, message):
-        self.console_output.config(state=tk.NORMAL)  # Habilitar escritura
+        self.console_output.config(state=tk.NORMAL)  # Allow writing
         self.console_output.insert(tk.END, message + "\n")
-        self.console_output.see(tk.END)  # Desplazar al final automáticamente
-        self.console_output.config(state=tk.DISABLED)  # Deshabilitar escritura
+        self.console_output.see(tk.END)  # Scroll to the end automatically
+        self.console_output.config(state=tk.DISABLED)  # Block writing
 
     def on_closing(self):
         if self.is_updated:
@@ -636,26 +636,26 @@ class AcquisitionGUI:
         """Updates the configuration with values entered in the text fields."""
         for key, entry in self.entries.items():
             value = entry.get()
-            # Convertir tipos numéricos si es necesario
+            # Convert the numeric types where needed
             if key in ["total_capture_time", "original_rate", "buffer_size", "decimation_factor", "db_port", "backup_time"]:
                 value = int(value)
             elif key in ["min_val", "max_val", "sensitivity"]:
                 value = float(value)
             elif key == "debug":
-                value = value.lower() == 'true'  # Convertir a booleano
+                value = value.lower() == 'true'  # Convert to a boolean
             self.config[key] = value
 
-        # Marcar que los datos fueron actualizados
+        # Flag the data as modified
         self.is_updated = True
 
-        # Guardar los nuevos valores en el archivo SETUP.txt
+        # Write the new values into SETUP.txt
         save_config(self.config)
         self.update_console("Configuration data saved in SETUP.txt, Stop any acquisition before running a new one with new parameters.")
 
     def open_check_gui(self):
         script_path = os.path.join("src", "GUI_check.py")
         self.update_console("Running GUI_Check in a new window...")
-        python_executable = sys.executable  # usa el mismo intérprete actual
+        python_executable = sys.executable  # reuse the interpreter running this GUI
         subprocess.Popen([python_executable, script_path])
 
     def stop_acquisition(self):
@@ -666,7 +666,7 @@ class AcquisitionGUI:
         try:
             with open("STOP.txt", "w") as f:
                 f.write("stop")
-            self.acquisition_running = False  # Solo marcarlo como detenido si el archivo se creó con éxito
+            self.acquisition_running = False  # Only mark it as stopped once the file was written
             self.execute_button.config(state="normal")  # <-- AQUI
             messagebox.showinfo("Stop", "Stop signal sent. If the process doesn't close automatically, press ENTER in the acquisition window.")
         except Exception as e:
@@ -693,15 +693,15 @@ if __name__ == "__main__":
     import time
 
     root = tk.Tk()
-    root.withdraw()  # Oculta la ventana principal
+    root.withdraw()  # Hide the main window
 
-    splash = SplashScreen()  # Mostrar el splash inmediatamente
+    splash = SplashScreen()  # Show the splash screen straight away
 
     def load_gui():
-        app = AcquisitionGUI(root)  # Carga completa aquí
+        app = AcquisitionGUI(root)  # Full load happens here
         splash.close()
-        root.deiconify()  # Mostrar la GUI principal
+        root.deiconify()  # Show the main GUI
 
-    # Ejecutar carga después de 100 ms (deja que el splash se renderice bien)
+    # Load after 100 ms, so the splash screen has time to render
     root.after(100, load_gui)
     root.mainloop()

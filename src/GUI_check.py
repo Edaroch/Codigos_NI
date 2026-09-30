@@ -17,8 +17,8 @@ class SplashScreen:
         self.splash.overrideredirect(True)
         self.splash.configure(bg="white")
         self.splash.geometry("400x120+500+300")
-        self.splash.lift()  # Poner al frente
-        self.splash.attributes("-topmost", True)  # Siempre encima
+        self.splash.lift()  # Bring to the front
+        self.splash.attributes("-topmost", True)  # Always on top
 
         label = tk.Label(self.splash, text="Loading CHECK GUI...", font=("Helvetica", 14), bg="white")
         label.pack(pady=10)
@@ -27,7 +27,7 @@ class SplashScreen:
         self.progress.pack(pady=10)
         self.progress.start()
 
-        # Forzar render inmediato
+        # Force an immediate render
         self.splash.update()
 
     def close(self):
@@ -148,7 +148,7 @@ class CheckGUI:
 
     def init_mosaic_layout(self):
         if self.mosaic_canvas is not None:
-            return  # Ya está inicializado
+            return  # Already initialized
 
         psd = self.data["psd"]
         f = np.array(self.data["frequencies"])
@@ -187,11 +187,11 @@ class CheckGUI:
     def toggle_auto(self):
         if self.auto_var.get():
             self.running = True
-            self.check_button.config(state='disabled')  # 🔒 Desactiva botón "Plot Once"
+            self.check_button.config(state='disabled')  # Disable the "Plot Once" button
             threading.Thread(target=self.auto_loop, daemon=True).start()
         else:
             self.running = False
-            self.check_button.config(state='normal')  # 🔓 Reactiva botón "Plot Once"
+            self.check_button.config(state='normal')  # Re-enable the "Plot Once" button
 
 
     def auto_loop(self):
@@ -249,7 +249,7 @@ class CheckGUI:
             print(f"[ERROR] Loading data: {e}")
             self.data = None
 
-        # Esperar 150 ms antes de cargar los sensores (evita que aparezca vacío)
+        # Wait 150 ms before loading the sensors, so the list is not shown empty
         self.root.after(150, self.update_sensor_checkboxes)
 
 
@@ -269,7 +269,7 @@ class CheckGUI:
 
         self.sensor_checkboxes_ready = True
 
-        # Si el usuario pidió overlay, y los sensores ya están listos, hacer el plot
+        # If the user asked for the overlay and the sensors are ready, draw it now
         if self.active_view == "overlay" and self.pending_overlay_plot:
             self.pending_overlay_plot = False
             self._plot_psd_overlay()
@@ -293,7 +293,7 @@ class CheckGUI:
             self.pending_overlay_plot = True
             return
 
-        # Si los sensores aún no están listos, esperar y marcar que hay un overlay pendiente
+        # Sensors are not ready yet: mark the overlay as pending and wait
         if not self.sensor_checkboxes_ready:
             self.pending_overlay_plot = True
             return
@@ -377,7 +377,7 @@ class CheckGUI:
 
         self.active_view = "mosaic"
 
-        # Oculta otros elementos
+        # Hide the other widgets
         self.canvas_widget.pack_forget()
         self.checkbox_frame.pack_forget()
 
@@ -393,7 +393,7 @@ class CheckGUI:
 
         self.annotations = []
 
-        # Crear layout solo una vez
+        # Build the layout only once
         if self.mosaic_canvas is None or not hasattr(self, "mosaic_axes") or len(self.mosaic_axes) != num:
             if self.mosaic_canvas:
                 self.mosaic_canvas.get_tk_widget().pack_forget()
@@ -415,7 +415,7 @@ class CheckGUI:
         else:
             axs = self.mosaic_axes
 
-        # Redibujar datos
+        # Redraw the data
         for ax in axs:
             ax.clear()
 
@@ -566,9 +566,9 @@ class CheckGUI:
         except Exception as e:
             print(f"Warning: Could not cancel after: {e}")
 
-        # Asegurarse de cerrar la ventana
-        self.root.quit()      # Rompe el mainloop
-        self.root.destroy()   # Cierra la ventana
+        # Make sure the window is closed
+        self.root.quit()      # Break out of the mainloop
+        self.root.destroy()   # Close the window
 
 
 # if __name__ == "__main__":
@@ -579,17 +579,17 @@ class CheckGUI:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.withdraw()  # Oculta la ventana principal
+    root.withdraw()  # Hide the main window
 
-    splash = SplashScreen()  # Mostrar el splash inmediatamente
+    splash = SplashScreen()  # Show the splash screen straight away
 
     def load_gui():
-        app = CheckGUI(root)  # Carga completa aquí
+        app = CheckGUI(root)  # Full load happens here
         splash.close()
-        root.deiconify()  # Mostrar la GUI principal
+        root.deiconify()  # Show the main GUI
         root.protocol("WM_DELETE_WINDOW", app.on_closing)
 
-    # Ejecutar carga después de 100 ms (deja que el splash se renderice bien)
+    # Load after 100 ms, so the splash screen has time to render
     root.after(100, load_gui)
     
     root.mainloop()

@@ -31,26 +31,26 @@ def load_config():
 
 def parse_restart_time(restart_time_str):
     """
-    Convierte la cadena de reinicio en segundos.
-    Ejemplos:
-    - "10s" -> 10 segundos
-    - "1h"  -> 1 hora en segundos
-    - "1d"  -> 1 día en segundos
-    - "1w"  -> 1 semana en segundos
+    Converts the restart string into seconds.
+    Examples:
+    - "10s" -> 10 seconds
+    - "1h"  -> one hour, in seconds
+    - "1d"  -> one day, in seconds
+    - "1w"  -> one week, in seconds
     """
     unit = restart_time_str[-1]
     time_value = float(restart_time_str[:-1])
 
     if unit == "s":
-        return time_value  # En segundos
+        return time_value  # Already in seconds
     elif unit == "h":
-        return time_value * 3600  # Horas a segundos
+        return time_value * 3600  # Hours to seconds
     elif unit == "d":
-        return time_value * 86400  # Días a segundos
+        return time_value * 86400  # Days to seconds
     elif unit == "w":
-        return time_value * 86400 * 7  # Semanas a segundos
+        return time_value * 86400 * 7  # Weeks to seconds
     else:
         raise ValueError(f"Format not supported: {restart_time_str}")
 
 if __name__ == "__main__":
-    pass  # Este archivo no está destinado a ejecutarse directamente
+    pass  # This file is not meant to be run directly

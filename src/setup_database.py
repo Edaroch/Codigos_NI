@@ -1,23 +1,23 @@
-from sqlite3 import connect  # Solo se importa la función connect de sqlite3
-from os import makedirs, path  # Solo se importan makedirs y path
-from pymongo import MongoClient, ASCENDING, errors  # Importar MongoClient y ASCENDING de pymongo
+from sqlite3 import connect
+from os import makedirs, path
+from pymongo import MongoClient, ASCENDING, errors
 from colorama import Fore, Style
 
-# Crear cliente persistente para MongoDB
+# Persistent MongoDB client
 mongo_client = None
 
 def create_sqlite_path_if_not_exists(sqlite_db_path):
     """
-    Crea la carpeta y archivo SQLite si no existen.
+    Creates the SQLite folder and file if they do not exist.
     """
     directory = path.dirname(sqlite_db_path)
 
-    # Crear el directorio si no existe
+    # Create the directory if it does not exist
     if not path.exists(directory):
         makedirs(directory)
         print(f"Directory created: {directory}")
 
-    # Crear el archivo de base de datos SQLite si no existe
+    # Create the SQLite database file if it does not exist
     if not path.exists(sqlite_db_path):
         open(sqlite_db_path, 'a').close()
         print(f"SQLite database created: {sqlite_db_path}")
@@ -73,30 +73,30 @@ def get_sensor_numbers(config):
 
 def isNaN(float_number):
     """
-    Verifica si un número es NaN.
+    Checks whether a number is NaN.
     """
     return float_number != float_number
 
 def setup_database(sqlite_db_path, config, sensor_numbers):
     """
-    Configura la base de datos SQLite y MongoDB.
+    Sets up the SQLite and MongoDB databases.
 
-    - SQLite se utiliza como base de datos buffer.
-    - MongoDB se configura para respaldos históricos.
+    - SQLite is used as the buffer database.
+    - MongoDB is set up for historical backups.
 
-    Parámetros:
-        sqlite_db_path (str): Ruta a la base de datos SQLite.
-        config (dict): Configuración cargada desde SETUP.txt.
-        sensor_numbers (list): Lista de números de sensores.
+    Args:
+        sqlite_db_path (str): Path to the SQLite database.
+        config (dict): Configuration loaded from SETUP.txt.
+        sensor_numbers (list): List of sensor numbers.
     """
-    # Configuración de SQLite
+    # SQLite configuration
     conn = connect(sqlite_db_path)
     cursor = conn.cursor()
 
-    # Activar WAL
+    # Enable WAL
     cursor.execute("PRAGMA journal_mode=WAL;")
 
-    # Crear tablas en SQLite
+    # Create the SQLite tables
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS timestamps (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,7 +126,7 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
 
     conn.commit()
 
-    # Insertar sensores en SQLite
+    # Insert the sensors into SQLite
     existing_sensors = set(row[0] for row in cursor.execute("SELECT sensor_number FROM sensors").fetchall())
     new_sensors = [sn for sn in sensor_numbers if sn not in existing_sensors]
 
@@ -137,7 +137,7 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
     print("Database setup complete in SQLite.")
 
 
-# Configuración de MongoDB
+# MongoDB configuration
     mongo_client = None
     if config['backup_time'] == 0:
         if config["debug"]:
@@ -146,22 +146,22 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
     try:
         # Inicializar cliente MongoDB
         mongo_client = MongoClient(config['db_host'], config['db_port'], serverSelectionTimeoutMS=5000)
-        mongo_client.admin.command('ping')  # Validar conexión
+        mongo_client.admin.command('ping')  # Validate the connection
 
-        # Configurar la base de datos raw (almacenamiento histórico)
+        # Set up the raw database (historical storage)
         db_raw = mongo_client[config['db_backup_name']]
         sensors_collection_raw = db_raw['sensors']
         accelerations_collection_raw = db_raw['accelerations']
 
-        # Crear índices en MongoDB
+        # Create the MongoDB indexes
         accelerations_collection_raw.create_index([("timestamp", ASCENDING)])
         print("Timestamp indexes created in the raw database.")
 
-        # Verificar sensores existentes en MongoDB
+        # Check which sensors already exist in MongoDB
         existing_sensors_raw = sensors_collection_raw.find({}, {"sensor_number": 1})
         existing_sensor_numbers_raw = {sensor["sensor_number"] for sensor in existing_sensors_raw}
 
-        # Insertar sensores en MongoDB si no existen
+        # Insert the sensors into MongoDB if they are missing
         new_sensors_raw = [sensor_number for sensor_number in sensor_numbers if sensor_number not in existing_sensor_numbers_raw]
         if new_sensors_raw:
             sensor_documents_raw = [{'sensor_number': sensor_number} for sensor_number in new_sensors_raw]
@@ -204,7 +204,7 @@ def close_mongodb_client():
     global mongo_client
     if mongo_client is not None:
         mongo_client.close()
-        mongo_client = None  # Resetear para asegurarnos de que se puede reinicializar más adelante
+        mongo_client = None  # Reset it so the client can be initialized again later
 
 if __name__ == "__main__":
-    pass  # Este archivo no está destinado a ejecutarse directamente
+    pass  # This file is not meant to be run directly

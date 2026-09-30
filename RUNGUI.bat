@@ -1,5 +1,5 @@
 @echo off
-echo Iniciando GUI...
+echo Starting GUI...
 call .venv\Scripts\activate
 python src\GUI.py
 deactivate

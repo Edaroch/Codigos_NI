@@ -19,7 +19,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
     interval = 1 / decimated_rate
     last_timestamp = None
 
-    # Verificar que config sea un diccionario
+    # Check that config is a dictionary
     if not isinstance(config, dict):
         raise ValueError("The argue 'config' must be a dictionary.")
 
@@ -65,23 +65,23 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
 
                 persistent_buffer.extend(df.to_dict(orient='records'))
 
-                # Agrupar los datos antes de enviarlos a SQLite3 para evitar múltiples inserciones pequeñas
+                # Group the data before sending it to SQLite3, to avoid many small inserts
                 if len(persistent_buffer) >= buffer_size/decimation_factor:
-                    buffer_to_db(persistent_buffer, sqlite_db_path, config)  # Usar SQLite3 como buffer
+                    buffer_to_db(persistent_buffer, sqlite_db_path, config)  # Use SQLite3 as the buffer
                     persistent_buffer = []
 
                 real_time_now = time.time()
                 if config["debug"]:
                     print(f"6) Final real-time {real_time_now} and real-time duration {(real_time_now - packet_start_time)}.")
 
-                # Calcular el tiempo de espera necesario
+                # Work out how long to wait
                 waiting_time = (last_timestamp - timestamps[0] + interval - (real_time_now - packet_start_time)) #
                 if config["debug"]:
                     print(f"7) Required waiting time: {waiting_time:.5f} seconds.")
                     print(f"8) Processing time so far: {real_time_now - packet_start_time} seconds.")
                     print(f"9) Total time between packets: {waiting_time + (real_time_now - packet_start_time)} seconds.")
 
-                # Dormir solo si el tiempo de espera es positivo
+                # Sleep only if the waiting time is positive
                 if waiting_time > 0 :
                     if data_queue.qsize() > 0:
                         time.sleep(0.01)
@@ -91,7 +91,7 @@ def process_data(data_queue, stop_event, total_capture_time, original_rate, deci
                         queue_time = 0    
                         
                 real_time_now = time.time()
-                time_difference = (real_time_now - last_timestamp - interval) # Diferencia de tiempo real
+                time_difference = (real_time_now - last_timestamp - interval) # Difference against the real elapsed time
                 if config["debug"]:
                     print(f"10) Real-time difference: {time_difference:.5f} seconds. DELAY (+), ADVANCE (-).")
 

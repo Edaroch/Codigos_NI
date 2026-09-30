@@ -1,5 +1,5 @@
 @echo off
-echo Iniciando proceso principal...
+echo Starting main process...
 call .venv\Scripts\activate
 python src\main.py
 deactivate

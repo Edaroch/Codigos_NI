@@ -151,7 +151,7 @@ relative to it.
 - `last_seconds.json` and `psd_results.json` are regenerated on every check;
   they are working files, not results to keep.
 - The full user manual, with step-by-step procedures and troubleshooting, is in
-  [doc/](doc/) as `Manual_Usuario.docx` and `Manual_Usuario.pdf`.
+  [doc/](doc/) as `User_Manual.docx` and `User_Manual.pdf`.
 
 ---
 
