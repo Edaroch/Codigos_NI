@@ -71,7 +71,6 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
 
                     if config["debug"]:
                         print(f"Complete packet sent: {full_data.shape}, Remaining data: {persistent_buffer_capture.shape}, Packet time: {current_time - last_time}")
-                    desfase = current_time - last_time    
                     last_time = current_time  # Actualizar tiempo del último paquete
                 else:
                     # Si no hay suficientes datos para un paquete, guardar todo en el buffer persistente
@@ -79,9 +78,6 @@ def capture_data(data_queue, stop_event, deviceName, total_capture_time, origina
 
                     if config["debug"]:
                         print(f"Remaining data in the buffer: {persistent_buffer_capture.shape}")
-
-                time.sleep(min(0, abs(5 * (1 - desfase))))  # Pausa para evitar uso excesivo de CPU
-                print(f"Waiting time: {1 - desfase}")
 
             except Exception as e:
                 print(f"[ERROR] Error capturing data: {e}")    

@@ -1,7 +1,7 @@
 import sys
-sys.path.append('src')
-import shutil
 import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import shutil
 import tkinter as tk
 from tkinter import scrolledtext, messagebox
 import subprocess
@@ -591,20 +591,6 @@ class AcquisitionGUI:
             self.update_plot()
             self.root.after(1000, self.auto_update_plot)
 
-    # def execute_main(self):
-    #     # Guardar la configuración actualizada
-    #     self.update_config()
-
-    #     # Ejecutar main.py en un nuevo cmd
-    #     self.update_console("Running main.py in a new console window...")
-    #     if os.name == 'nt':  # Windows
-    #         subprocess.Popen(['start', 'cmd', '/c', 'python', 'main.py'], shell=True)
-    #     else:  # Linux, macOS
-    #         subprocess.Popen(['x-terminal-emulator', '-e', 'python main.py'])
-
-    #     self.update_console("Acquisition running. Press 'Stop Acquisition' button to stop the acquisition process.")
-    #     self.acquisition_running = True
-
     def execute_main(self):
         if self.acquisition_running:
             self.update_console("⚠️ Acquisition is already running.")
@@ -617,9 +603,9 @@ class AcquisitionGUI:
         # Ejecutar main.py en un nuevo cmd
         self.update_console("Running main.py in a new console window...")
         if os.name == 'nt':  # Windows
-            subprocess.Popen(['start', 'cmd', '/c', 'python', 'main.py'], shell=True)
+            subprocess.Popen(['start', 'cmd', '/c', 'python', 'src/main.py'], shell=True)
         else:  # Linux, macOS
-            subprocess.Popen(['x-terminal-emulator', '-e', 'python main.py'])
+            subprocess.Popen(['x-terminal-emulator', '-e', 'python src/main.py'])
 
         self.acquisition_running = True
         self.update_console("Acquisition running. Press 'Stop Acquisition' button to stop the acquisition process.")

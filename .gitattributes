@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Documentos generados: nunca normalizar saltos de linea
+*.pdf binary
+*.docx binary

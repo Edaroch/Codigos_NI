@@ -1,9 +1,7 @@
-from sys import path
 import time
 from threading import Thread, Event  # threading.Event para el manejo de hilos
 from multiprocessing import Event as MPEvent  # multiprocessing.Event para procesos
 import os
-path.append('src')
 
 from data_acquisition import run_data_acquisition
 from load_setup_data import load_config, parse_restart_time
