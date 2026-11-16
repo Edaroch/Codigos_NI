@@ -9,13 +9,19 @@ import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from load_setup_data import load_config
+from load_setup_data import load_config, LEGACY_KEYS, NI9230_RATES
+from utils import save_figure
 from tkinter import ttk
+
+
+def format_rate(rate):
+    """Formats a sampling rate for display: 1600.0 -> '1600', 8533.333 -> '8533.33'."""
+    return f"{float(rate):.2f}".rstrip("0").rstrip(".")
 
 
 # Function to save the configuration without deleting comments or adding blank lines
 
-def save_config(config):
+def save_config(config, comments):
     with open('SETUP.txt', 'r') as file:
         lines = file.readlines()
 
@@ -23,16 +29,16 @@ def save_config(config):
         for line in lines:
             line_stripped = line.strip()
             if line_stripped and not line_stripped.startswith('#'):  # If not a comment
-                key = line_stripped.split(': ')[0]  # Get the key (e.g., 'deviceName')
+                key = line_stripped.split(': ')[0]  # Get the key (e.g., 'device_name')
+                comment = f" {line[line.index('#'):]}" if '#' in line else "\n"
+                if key in LEGACY_KEYS:  # Migrate a deprecated key, with an up-to-date comment
+                    key = LEGACY_KEYS[key]
+                    comment = f" # {comments[key]}\n"
                 if key in config:
                     value = config[key]
                     if key == 'debug':
                         value = 'true' if value else 'false'
-                    # Keep the original comment, without adding extra spaces
-                    if '#' in line:
-                        file.write(f"{key}: {value} {line[line.index('#'):]}")  # Keep the comment
-                    else:
-                        file.write(f"{key}: {value}\n")
+                    file.write(f"{key}: {value}{comment}")  # Keep the original comment
                 else:
                     file.write(line)  # Leave the line untouched if the key is not a known one
             else:
@@ -111,7 +117,7 @@ class AcquisitionGUI:
         self.sections = {
             "CAPTURE SETUP": ["total_capture_time", "restart_time", "debug"],
             "DAQ SETUP": [
-                "deviceName", "original_rate", "buffer_size", "decimation_factor",
+                "device_name", "frequency_rate", "buffer_time", "decimation_factor",
                 "daq_num_modules", "daq_ch_per_module", "unused_ch"
             ],
             "SENSOR SETUP": ["min_val", "max_val", "sensitivity"],
@@ -121,11 +127,11 @@ class AcquisitionGUI:
 
         # Per-parameter explanations
         self.explanations = {
-            "deviceName": "Name of the data acquisition device. Check in NI-MAX for the name, e.g., cDAQ9185-21DAXXX",
+            "device_name": "Name of the data acquisition device. Check in NI-MAX for the name, e.g., cDAQ9185-21DAXXX",
             "total_capture_time": "Total capture time in seconds (0 for continuous capture).",
-            "original_rate": "Original sampling frequency in Hz. Use values above 1000 for NI DAQ and apply decimation.",
-            "buffer_size": "Buffer size for data capture. This information is sent to the DAQ. If you take data at 200Hz and your buffer is 400Hz, the DAQ will send data every 2 seconds.",
-            "decimation_factor": "Factor to reduce the sampling frequency.",
+            "frequency_rate": "DAQ sampling rate in Hz. The list holds every NI-9230 data rate, fs = 13.1072 MHz / (2*m*n), from 984.62 Hz to 12800 Hz.",
+            "buffer_time": "Seconds of data the DAQ collects before sending a block. Buffer size in samples = buffer_time * frequency_rate.",
+            "decimation_factor": "Factor to reduce the sampling rate. The stored rate is frequency_rate / decimation_factor.",
             "min_val": "Minimum expected value in measurements (sensor). Check the sensor's technical datasheet.",
             "max_val": "Maximum expected value in measurements (sensor). Check the sensor's technical datasheet.",
             "sensitivity": "Sensor sensitivity. Check the sensor's technical datasheet.",
@@ -145,10 +151,9 @@ class AcquisitionGUI:
         self.units = {
             "total_capture_time": "s",
             "restart_time": " ",
-            "original_rate": "Hz",
-            "buffer_size": "samples",
-            "decimation_factor": "",
             "frequency_rate": "Hz",
+            "buffer_time": "s",
+            "decimation_factor": "",
             "min_val": "m/s²",
             "max_val": "m/s²",
             "sensitivity": "V/g",
@@ -158,7 +163,7 @@ class AcquisitionGUI:
 
         self.locked_fields = {
             key: True for key in [
-                "restart_time", "debug", "original_rate", "buffer_size","decimation_factor","backup_time","unused_ch",
+                "restart_time", "debug", "frequency_rate", "buffer_time","decimation_factor","backup_time","unused_ch",
                 "db_path", "sqlite_name", "db_host", "db_port", "db_backup_name"
             ]
         }
@@ -186,7 +191,8 @@ class AcquisitionGUI:
 - Press the 'Stop Acquisition' button to stop the acquisition at any time.
 - To update the list of available sensors from the database, press 'Find Sensors'.
 - To enable automatic updates of the plot every 2 seconds, check the 'Auto-update' box.
-- To visualize frequency-domain data, press 'Check Data' to open the Check GUI with PSD and SVD plots.
+- To visualize frequency-domain data, press 'Spectral Analysis' to open the Analysis GUI with PSD and SVD plots.
+- To export the current plot as PNG or PDF, press 'Save figure'.
 - If you want to perform non-continuous captures, set the 'backup_time' to 0.
 - Before starting a new acquisition, change the database name if you want to store the data in a new file.
 - The only parameter that accepts time units is 'restart_time'; Use 's' for seconds (e.g., 10s), use 'h' for hours (e.g., 1h), use 'd' for days (e.g., 1d). This field defines the interval to restart the acquisition. If set to 0s, it won't restart and may accumulate delay.
@@ -265,6 +271,12 @@ class AcquisitionGUI:
 
     def create_setup_panel(self, parent):
         """Creates the configuration panel content with proper alignment."""
+        # Fields chosen from a closed list instead of typed
+        choices = {
+            "debug": ["True", "False"],
+            "frequency_rate": [format_rate(rate) for rate in NI9230_RATES],
+        }
+
         for section, keys in self.sections.items():
             # Section title label, centred
             section_label = tk.Label(parent, text=section, font=("Helvetica", 9, "bold"))
@@ -274,26 +286,28 @@ class AcquisitionGUI:
             section_frame = tk.Frame(parent)
             section_frame.pack(pady=5, fill=tk.X)
 
-            row_offset = 0  # Tracks the extra rows
-
             for row, key in enumerate(keys):
                 value = self.config.get(key, "")
+                locked = self.locked_fields.get(key, False)
 
                 # Label
                 unit = self.units.get(key, "")
                 label_text = f"{key} ({unit})" if unit else key
                 variable_label = tk.Label(section_frame, text=label_text, anchor="w", width=25)
-                variable_label.grid(row=row + row_offset, column=0, padx=10, pady=5, sticky="w")
+                variable_label.grid(row=row, column=0, padx=10, pady=5, sticky="w")
 
-                # Entry
-                entry = tk.Entry(section_frame, width=20)
-                entry.insert(0, str(value))
+                # Entry, or drop-down list for the closed fields
+                if key in choices:
+                    entry = ttk.Combobox(section_frame, values=choices[key], width=18, height=15)
+                    entry.set(format_rate(value) if key == "frequency_rate" else str(value))
+                    entry.config(state='disabled' if locked else 'readonly')
+                else:
+                    entry = tk.Entry(section_frame, width=20)
+                    entry.insert(0, str(value))
+                    if locked:
+                        entry.config(state='readonly')
 
-                # Disable it if the field is in the locked list
-                if key in self.locked_fields and self.locked_fields[key]:
-                    entry.config(state='readonly')
-
-                entry.grid(row=row + row_offset, column=1, padx=10, pady=5, sticky="w")
+                entry.grid(row=row, column=1, padx=10, pady=5, sticky="w")
                 self.entries[key] = entry
 
 
@@ -310,62 +324,36 @@ class AcquisitionGUI:
                         command=lambda k=key, e=entry, b=None: self.toggle_lock(k, e, b)
                     )
                     lock_button.config(command=lambda k=key, e=entry, b=lock_button: self.toggle_lock(k, e, b))
-                    lock_button.grid(row=row + row_offset, column=2, padx=5)
+                    lock_button.grid(row=row, column=2, padx=5)
 
-                # For decimation_factor, add an extra frequency field underneath
+                # Stored sampling rate after decimation, shown for information only
                 if key == "decimation_factor":
-                    row_offset += 1  # Skip a row for the new field
+                    self.output_rate_label = tk.Label(section_frame, anchor="w")
+                    self.output_rate_label.grid(row=row, column=3, padx=5, sticky="w")
 
-                    freq_label = tk.Label(section_frame, text="frequency_rate", anchor="w", width=20)
-                    freq_label.grid(row=row + row_offset, column=0, padx=10, pady=5, sticky="w")
-                    ToolTip(freq_label, "Select desired sampling frequency in Hz. It will automatically set the appropriate decimation factor.")
-
-                    freq_var = tk.StringVar()
-                    freq_combo = ttk.Combobox(section_frame, textvariable=freq_var, state="readonly", width=18)
-                    freq_combo['values'] = ["10 Hz", "20 Hz", "50 Hz", "75 Hz", "100 Hz", "150 Hz", "200 Hz", "250 Hz", "300 Hz", "400 Hz"]
-                    freq_combo.grid(row=row + row_offset, column=1, padx=10, pady=5, sticky="w")
-
-                    # Update the decimation factor from the frequency
-                    def on_freq_selected(event, entry=entry, freq_var=freq_var):
-                        try:
-                            original_rate = int(self.entries["original_rate"].get())
-                            freq = float(freq_var.get().split()[0])
-                            decimation = round(original_rate / freq)
-                            entry.config(state='normal')
-                            entry.delete(0, tk.END)
-                            entry.insert(0, str(decimation))
-                            if self.locked_fields.get("decimation_factor", False):
-                                entry.config(state='readonly')
-                        except Exception as e:
-                            print(f"Error updating decimation from frequency: {e}")
-
-                    # Update the frequency from the decimation factor
-                    def on_decimation_changed(event=None, entry=entry, freq_var=freq_var):
-                        try:
-                            original_rate = int(self.entries["original_rate"].get())
-                            decimation = int(entry.get())
-                            freq = round(original_rate / decimation, 2)
-                            freq_var.set(f"{freq} Hz")
-                        except Exception:
-                            pass
-
-                    freq_combo.bind("<<ComboboxSelected>>", on_freq_selected)
-                    entry.bind("<KeyRelease>", on_decimation_changed)
-                    on_decimation_changed()
+        self.entries["frequency_rate"].bind("<<ComboboxSelected>>", self.update_output_rate)
+        self.entries["decimation_factor"].bind("<KeyRelease>", self.update_output_rate)
+        self.update_output_rate()
 
         update_section_button = tk.Button(parent, text="Save Changes", command=self.update_config)
         update_section_button.pack(pady=(10, 15))
 
-    
+    def update_output_rate(self, event=None):
+        """Shows the stored sampling rate, frequency_rate / decimation_factor."""
+        try:
+            rate = float(self.entries["frequency_rate"].get()) / int(self.entries["decimation_factor"].get())
+            self.output_rate_label.config(text=f"Stored rate: {format_rate(rate)} Hz")
+        except (ValueError, ZeroDivisionError):
+            self.output_rate_label.config(text="Stored rate: -")
+
     def toggle_lock(self, key, entry_widget, button_widget):
-        is_locked = self.locked_fields[key]
-        if is_locked:
-            entry_widget.config(state='normal')
-            button_widget.config(text="🔓")
+        locked = not self.locked_fields[key]
+        self.locked_fields[key] = locked
+        if isinstance(entry_widget, ttk.Combobox):  # A drop-down list never accepts typed text
+            entry_widget.config(state='disabled' if locked else 'readonly')
         else:
-            entry_widget.config(state='readonly')
-            button_widget.config(text="🔒")
-        self.locked_fields[key] = not is_locked
+            entry_widget.config(state='readonly' if locked else 'normal')
+        button_widget.config(text="🔒" if locked else "🔓")
 
             
 
@@ -389,6 +377,9 @@ class AcquisitionGUI:
 
         # Button that queries the database again
         tk.Button(button_frame, text="Find Sensors", command=self.update_sensor_checkboxes).pack(side=tk.LEFT, padx=5)
+
+        # Button that exports the current plot
+        tk.Button(button_frame, text="Save figure", command=self.save_plot).pack(side=tk.LEFT, padx=5)
 
         # Box showing the time lag
         self.time_lag_label = tk.Label(button_frame, text="Time Lag: 0.00s", width=20, anchor="w", relief=tk.SUNKEN)
@@ -577,6 +568,12 @@ class AcquisitionGUI:
 
         self.canvas.draw()
 
+    def save_plot(self):
+        """Exports the time-series plot as PNG or PDF."""
+        path = save_figure(self.figure, "time_series")
+        if path:
+            self.update_console(f"Figure saved to {path}")
+
     def toggle_auto_update(self):
         """Enables or disables auto-updating of the plot."""
         if self.auto_update_var.get():
@@ -637,24 +634,24 @@ class AcquisitionGUI:
         for key, entry in self.entries.items():
             value = entry.get()
             # Convert the numeric types where needed
-            if key in ["total_capture_time", "original_rate", "buffer_size", "decimation_factor", "db_port", "backup_time"]:
+            if key in ["total_capture_time", "decimation_factor", "db_port", "backup_time"]:
                 value = int(value)
-            elif key in ["min_val", "max_val", "sensitivity"]:
-                value = float(value)
+            elif key in ["frequency_rate", "buffer_time", "min_val", "max_val", "sensitivity"]:
+                float(value)  # Validate only: the text is saved as shown (e.g. 8533.33, not 8533.333333)
             elif key == "debug":
-                value = value.lower() == 'true'  # Convert to a boolean
+                value = value == "True"  # Convert to a boolean
             self.config[key] = value
 
         # Flag the data as modified
         self.is_updated = True
 
         # Write the new values into SETUP.txt
-        save_config(self.config)
+        save_config(self.config, self.explanations)
         self.update_console("Configuration data saved in SETUP.txt, Stop any acquisition before running a new one with new parameters.")
 
-    def open_check_gui(self):
-        script_path = os.path.join("src", "GUI_check.py")
-        self.update_console("Running GUI_Check in a new window...")
+    def open_analysis_gui(self):
+        script_path = os.path.join("src", "GUI_analysis.py")
+        self.update_console("Opening the Analysis GUI in a new window...")
         python_executable = sys.executable  # reuse the interpreter running this GUI
         subprocess.Popen([python_executable, script_path])
 
@@ -667,7 +664,7 @@ class AcquisitionGUI:
             with open("STOP.txt", "w") as f:
                 f.write("stop")
             self.acquisition_running = False  # Only mark it as stopped once the file was written
-            self.execute_button.config(state="normal")  # <-- AQUI
+            self.execute_button.config(state="normal")  # Allow a new acquisition
             messagebox.showinfo("Stop", "Stop signal sent. If the process doesn't close automatically, press ENTER in the acquisition window.")
         except Exception as e:
             self.update_console(f"❌ Failed to send stop signal: {e}")
@@ -686,8 +683,8 @@ class AcquisitionGUI:
         stop_button = tk.Button(button_frame, text="Stop Acquisition", command=self.stop_acquisition)
         stop_button.grid(row=0, column=3, padx=10)
 
-        check_button = tk.Button(button_frame, text="Check Data", command=self.open_check_gui)
-        check_button.grid(row=0, column=5, padx=10)
+        analysis_button = tk.Button(button_frame, text="Spectral Analysis", command=self.open_analysis_gui)
+        analysis_button.grid(row=0, column=5, padx=10)
 
 if __name__ == "__main__":
     import time

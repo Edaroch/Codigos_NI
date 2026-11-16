@@ -8,20 +8,20 @@ from scipy.signal import decimate
 
 
 
-def process_data(data_queue, stop_event, total_capture_time, original_rate, decimation_factor, sensor_numbers, sqlite_db_path, config, buffer_size):
+def process_data(data_queue, stop_event, total_capture_time, frequency_rate, decimation_factor, sensor_numbers, sqlite_db_path, config, buffer_size):
     """
     Processes captured data and sends it to the SQLite database as a buffer.
     """
     persistent_buffer = []
     packet_count = 0
     queue_time = 0
-    decimated_rate = original_rate // decimation_factor
+    decimated_rate = frequency_rate / decimation_factor  # true division: NI-9230 rates need not be integers
     interval = 1 / decimated_rate
     last_timestamp = None
 
     # Check that config is a dictionary
     if not isinstance(config, dict):
-        raise ValueError("The argue 'config' must be a dictionary.")
+        raise ValueError("The argument 'config' must be a dictionary.")
 
     while not stop_event.is_set():
         if total_capture_time > 0 and packet_count >= total_capture_time:

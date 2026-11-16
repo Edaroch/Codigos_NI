@@ -4,7 +4,7 @@ Real-time acquisition of acceleration data from multiple seismic sensors using a
 National Instruments DAQ (cDAQ9185 / cDAQ9189 with NI 9230 modules). Data is
 captured at high rate, decimated, buffered in SQLite and archived in MongoDB.
 Configuration lives in `SETUP.txt`; two Tkinter GUIs cover acquisition control
-and frequency-domain checking (PSD / SVD).
+and spectral analysis (PSD / SVD).
 
 > **Branches** — `production` is the deployed code; `main` is development.
 > Deploy from `production` only.
@@ -60,8 +60,9 @@ relative to it.
 | --- | --- |
 | Control panel GUI | `RUNGUI.bat` (or `python src\GUI.py`) |
 | Acquisition without GUI | `RUNMAIN.bat` (or `python src\main.py`) |
-| Check GUI (PSD / SVD) | `python src\GUI_check.py`, or the *Check Data* button |
+| Analysis GUI (PSD / SVD) | `python src\GUI_analysis.py`, or the *Spectral Analysis* button |
 | Verify the installation | `python test_smoke.py` |
+| End-to-end test (acquisition, SQLite, both GUIs) | `python test_acquisition.py` |
 | Inspect MongoDB for duplicates | `python control\check_mongo_db.py` |
 
 ### Stopping an acquisition
@@ -69,6 +70,23 @@ relative to it.
 - Press **ENTER** in the acquisition console, **or**
 - Press **Stop Acquisition** in the GUI (writes a `STOP.txt` the acquisition
   polls once per second and then deletes).
+
+### Exporting figures
+
+Every view has a **Save figure** button: the time series of the control panel,
+and PSD Overlay, PSD Mosaic and SVD in the Analysis GUI. It saves the plot on
+screen as PNG (300 dpi) or PDF, proposing `figures/<view>_<YYYYmmdd_HHMMSS>.png`;
+change the extension to `.pdf`, or pick PDF in the dialog, for a vector file.
+
+### Testing without hardware
+
+`test_acquisition.py` runs `src/main.py` for 15 s in a temporary folder, checks
+the samples and timestamps stored in SQLite, computes the PSD and SVD, and drives
+both GUIs. It uses the NI-DAQmx device named in `device_name` if the driver
+lists it, so a simulated device works: in NI MAX, *Devices and Interfaces >
+Create New > Simulated NI-DAQmx Chassis > cDAQ-9185*, name it as `device_name`
+and add one NI 9230 per module. Without the driver it emulates the DAQ with one
+sine per channel and checks the PSD peaks.
 
 ---
 
@@ -83,7 +101,7 @@ relative to it.
    data in SQLite.
 4. **Restart** — if `restart_time` is non-zero the whole acquisition cycle is
    restarted at that interval, which bounds any accumulated drift.
-5. **Analysis** — `GUI_check.py` calls `utils.py` to export the last 30 s from
+5. **Analysis** — `GUI_analysis.py` calls `utils.py` to export the last 30 s from
    SQLite to `last_seconds.json`, computes PSD and SVD into `psd_results.json`
    and plots them.
 
@@ -103,13 +121,14 @@ relative to it.
 │   ├── load_setup_data.py # SETUP.txt parser
 │   ├── utils.py           # data export, PSD and SVD
 │   ├── GUI.py             # acquisition control panel
-│   └── GUI_check.py       # PSD / SVD viewer
+│   └── GUI_analysis.py    # Analysis GUI: PSD / SVD viewer
 ├── control/
 │   └── check_mongo_db.py  # duplicate / orphan check on MongoDB
 ├── doc/                   # user manual (DOCX and PDF)
 ├── SETUP.txt              # configuration
 ├── requirements.txt
 ├── test_smoke.py          # installation check
+├── test_acquisition.py    # end-to-end test, real, simulated or emulated DAQ
 ├── RUNGUI.bat / RUNMAIN.bat
 └── README.md
 ```
@@ -122,14 +141,20 @@ relative to it.
 - `total_capture_time`: duration in seconds (`0` = continuous).
 - `backup_time`: seconds between SQLite → MongoDB backups (`0` = no backup).
 - `restart_time`: restart interval — `0`, `10s`, `1h`, `1d`, `1w`.
-- `debug`: verbose console output.
+- `debug`: verbose console output, `true` or `false` (any other value is
+  rejected).
 
 **DAQ**
-- `deviceName`: device name as shown in NI MAX.
-- `original_rate`: raw sampling rate in Hz (2–24000).
-- `buffer_size`: DAQ buffer in samples; the DAQ delivers data when it fills.
-- `decimation_factor`: downsampling factor; effective rate is
-  `original_rate / decimation_factor`.
+- `device_name`: device name as shown in NI MAX.
+- `frequency_rate`: DAQ sampling rate in Hz. It must be one of the 45 NI-9230
+  data rates, fs = 13.1072 MHz / (2·m·n) with m = 64 (n = 9–25), 128 (n = 5–25)
+  or 256 (n = 2–26), from 984.62 Hz to 12800 Hz (NI 9230 datasheet, Table 1).
+  The list lives in `NI9230_RATES` (`src/load_setup_data.py`) and fills the GUI
+  drop-down; any other value is rejected, since DAQmx would silently change it.
+- `buffer_time`: seconds of data per DAQ read; the DAQ buffer holds
+  `buffer_time × frequency_rate` samples.
+- `decimation_factor`: downsampling factor; the stored rate is
+  `frequency_rate / decimation_factor`, shown next to it in the GUI.
 - `daq_num_modules`, `daq_ch_per_module`: hardware layout.
 - `unused_ch`: `nan`, or two-digit ids separated by commas (`21, 22`) where the
   first digit is the module and the second the channel.
@@ -142,14 +167,25 @@ relative to it.
 - `db_path`, `sqlite_name`: location and name of the SQLite buffer.
 - `db_host`, `db_port`, `db_backup_name`: MongoDB connection and database.
 
+**Older `SETUP.txt` files** still load. Each deprecated key prints a
+`FutureWarning`, and saving from the GUI rewrites it with the new name:
+
+| Deprecated key | Replaced by |
+| --- | --- |
+| `deviceName` | `device_name` |
+| `original_rate` | `frequency_rate` (same meaning, now restricted to NI-9230 rates) |
+| `buffer_size` (samples) | `buffer_time` (seconds) = `buffer_size / frequency_rate` |
+
 ---
 
 ## Notes
 
 - If MongoDB is unreachable, backups are disabled automatically and data stays
   in SQLite — the acquisition does not stop.
-- `last_seconds.json` and `psd_results.json` are regenerated on every check;
+- `last_seconds.json` and `psd_results.json` are regenerated on every analysis;
   they are working files, not results to keep.
+- PSD and singular values are plotted in (m/s²)²/Hz. *Log Scale* only changes
+  the axis; the values are not converted to dB.
 - The full user manual, with step-by-step procedures and troubleshooting, is in
   [doc/](doc/) as `User_Manual.docx` and `User_Manual.pdf`.
 

@@ -4,7 +4,7 @@ import threading
 import time
 import json
 import os
-from utils import get_last_seconds_from_sqlite, get_PSD_SVD_from_file
+from utils import get_last_seconds_from_sqlite, get_PSD_SVD_from_file, save_figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,7 +20,7 @@ class SplashScreen:
         self.splash.lift()  # Bring to the front
         self.splash.attributes("-topmost", True)  # Always on top
 
-        label = tk.Label(self.splash, text="Loading CHECK GUI...", font=("Helvetica", 14), bg="white")
+        label = tk.Label(self.splash, text="Loading Analysis GUI...", font=("Helvetica", 14), bg="white")
         label.pack(pady=10)
 
         self.progress = ttk.Progressbar(self.splash, mode='indeterminate', length=300)
@@ -35,10 +35,10 @@ class SplashScreen:
         self.splash.destroy()
 
 
-class CheckGUI:
+class AnalysisGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Data Checking GUI")
+        self.root.title("Analysis GUI")
 
         self.plot_queue = queue.Queue()
         self.after_id = self.root.after(100, self.process_plot_queue)
@@ -109,6 +109,9 @@ class CheckGUI:
 
         self.svd_btn = ttk.Button(graph_frame, text="Show SVD", command=self.plot_singular_values)
         self.svd_btn.pack(side="left", padx=5)
+
+        self.save_btn = ttk.Button(graph_frame, text="Save figure", command=self.save_current_figure)
+        self.save_btn.pack(side="left", padx=(20, 5))
 
         # # SVD button
         # svd_frame = ttk.LabelFrame(root, text="Singular Values")
@@ -217,7 +220,7 @@ class CheckGUI:
         except queue.Empty:
             pass
         finally:
-            # vuelve a revisar en 100 ms
+            # check again in 100 ms
             self.after_id = self.root.after(100, self.process_plot_queue)
 
     def sync_gui_update_if_overlay(self):
@@ -341,8 +344,8 @@ class CheckGUI:
             self.ax.set_ylim(bottom=0, top=1.05 * ymax)
 
             if self.log_scale_var.get():
-                self.ax.set_yscale("log")
-                self.ax.set_ylabel("PSD [dB]")
+                self.ax.set_yscale("log")  # Log axis; the values stay in (m/s²)²/Hz, not dB
+                self.ax.set_ylabel("PSD [(m/s²)²/Hz]")
                 self.ax.set_ylim(
                     bottom=max(1e-30, np.min([v for v in self.ax.get_lines()[0].get_ydata() if v > 0])),
                     top=1.05 * ymax
@@ -434,7 +437,7 @@ class CheckGUI:
             positive_values = v_arr[mask][v_arr[mask] > 0]
             if self.log_scale_var.get() and len(positive_values) > 0:
                 ax.set_yscale("log")
-                ax.set_ylabel(f"{label}\n[dB]")
+                ax.set_ylabel(f"{label}\n[(m/s²)²/Hz]")
                 ax.set_ylim(
                     bottom=max(1e-30, np.min(positive_values)),
                     top=1.05 * np.max(positive_values)
@@ -511,12 +514,12 @@ class CheckGUI:
             self.ax.set_xlabel("Frequency [Hz]")
             self.ax.set_xlim([fmin, fmax])
 
+            # Singular values of the PSD matrix carry the units of the PSD
+            self.ax.set_ylabel("Singular Value [(m/s²)²/Hz]")
             if self.log_scale_var.get():
                 self.ax.set_yscale("log")
-                self.ax.set_ylabel("Singular Value [dB]")
             else:
                 self.ax.set_yscale("linear")
-                self.ax.set_ylabel("Singular Value [Amplitude]")
                 self.ax.set_ylim(bottom=0, top=1.05 * y_max)
 
             self.ax.grid(True)
@@ -526,6 +529,16 @@ class CheckGUI:
 
         self.canvas.draw_idle()
         
+    def save_current_figure(self):
+        """Exports the view on screen (PSD Overlay, PSD Mosaic or SVD) as PNG or PDF."""
+        if self.active_view == "mosaic":
+            fig, name = self.mosaic_fig, "psd_mosaic"
+        else:
+            fig, name = self.fig, "svd" if self.active_view == "svd" else "psd_overlay"
+        path = save_figure(fig, name)
+        if path:
+            print(f"Figure saved to {path}")
+
     def on_hover_mosaic(self, event):
         if not self.mosaic_ready or not self.mosaic_fig or not event.inaxes:
             for ann in self.annotations:
@@ -573,7 +586,7 @@ class CheckGUI:
 
 # if __name__ == "__main__":
 #     root = tk.Tk()
-#     app = CheckGUI(root)
+#     app = AnalysisGUI(root)
 #     root.protocol("WM_DELETE_WINDOW", app.on_closing)
 #     root.mainloop()
 
@@ -584,7 +597,7 @@ if __name__ == "__main__":
     splash = SplashScreen()  # Show the splash screen straight away
 
     def load_gui():
-        app = CheckGUI(root)  # Full load happens here
+        app = AnalysisGUI(root)  # Full load happens here
         splash.close()
         root.deiconify()  # Show the main GUI
         root.protocol("WM_DELETE_WINDOW", app.on_closing)

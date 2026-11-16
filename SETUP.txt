@@ -5,10 +5,10 @@ restart_time: 6h # Restart interval: 0 for continuous acquisition, 10s for every
 debug: true # Debug mode, true to enable debug logs, false to disable them.
 
 # DAQ SETUP
-deviceName: cDAQ1 # Name of the data acquisition device as shown in NI MAX, e.g. cDAQ9185-21DA9E1 or cDAQ9189-213ABD2.
-original_rate: 1600 # Original sampling rate of the DAQ, in Hz. From 2 Hz to 24000 Hz.
-buffer_size: 1600 # Size of the DAQ buffer. The DAQ sends data when the buffer fills: at 200 Hz with a buffer of 600, it sends data every 3 seconds.
-decimation_factor: 8 # Decimation factor used to reduce the sampling rate.
+device_name: cDAQ1 # Name of the data acquisition device as shown in NI MAX, e.g. cDAQ9185-21DA9E1 or cDAQ9189-213ABD2.
+frequency_rate: 1600 # DAQ sampling rate in Hz. Must be an NI-9230 data rate, fs = 13.1072 MHz / (2*m*n), from 984.62 Hz to 12800 Hz (the GUI lists them all).
+buffer_time: 1 # Seconds of data the DAQ collects before sending a block. Buffer size in samples = buffer_time * frequency_rate.
+decimation_factor: 8 # Decimation factor. The stored sampling rate is frequency_rate / decimation_factor.
 daq_num_modules: 2 # Number of modules connected to the DAQ.
 daq_ch_per_module: 3 # Number of channels on each DAQ module (usually 3).
 unused_ch: nan # Two options: nan (every channel is used) or two-digit numbers separated by commas (e.g. 21, 22) where ij: i -> module number; j -> channel number.

@@ -93,9 +93,9 @@ def main():
 
         # Start the data acquisition, processing, and backup process
         acquisition_thread = Thread(target=run_data_acquisition, args=(
-            config["deviceName"],
+            config["device_name"],
             int(config["total_capture_time"]),
-            int(config["original_rate"]),
+            config["frequency_rate"],
             int(config["decimation_factor"]),
             float(config["min_val"]),
             float(config["max_val"]),
@@ -120,7 +120,7 @@ def main():
             print(f"Restarting the capture after {restart_time_in_seconds} seconds.")
             time.sleep(1)  # Wait a second before restarting
         else:
-            print("All process were stopped manually.")
+            print("All processes were stopped manually.")
             break
 
     stop_thread.join()  # Ensure the stop thread finishes

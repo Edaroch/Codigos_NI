@@ -144,7 +144,7 @@ def setup_database(sqlite_db_path, config, sensor_numbers):
             print(Fore.RED + "Backup_time is 0, MongoDB database will not be configured" + Style.RESET_ALL)
         return
     try:
-        # Inicializar cliente MongoDB
+        # Initialise the MongoDB client
         mongo_client = MongoClient(config['db_host'], config['db_port'], serverSelectionTimeoutMS=5000)
         mongo_client.admin.command('ping')  # Validate the connection
 

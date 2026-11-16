@@ -4,12 +4,36 @@ import scipy as sp
 import pandas as pd
 import matplotlib.pyplot as plt
 # import warnings
+from datetime import datetime
 from json import load, dump
 from sqlite3 import connect
 from typing import Tuple, Optional, List, Dict
 
 from setup_database import initialize_mongodb_client, close_mongodb_client
 from load_setup_data import load_config
+
+
+def save_figure(fig, name: str, path: Optional[str] = None) -> Optional[str]:
+    """
+    Saves a Matplotlib figure as PNG or PDF; the format follows the file extension.
+    Without a path, a save dialog proposes figures/<name>_<YYYYmmdd_HHMMSS>.png.
+
+    Returns:
+        The saved path, or None if the user cancelled the dialog.
+    """
+    if path is None:
+        from tkinter import filedialog
+        os.makedirs("figures", exist_ok=True)
+        path = filedialog.asksaveasfilename(
+            title="Save figure",
+            initialdir=os.path.abspath("figures"),
+            initialfile=f"{name}_{datetime.now():%Y%m%d_%H%M%S}.png",
+            defaultextension=".png",
+            filetypes=[("PNG image", "*.png"), ("PDF document", "*.pdf")])
+        if not path:
+            return None
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    return path
 
 
 def get_last_seconds_from_sqlite(seconds: int,
