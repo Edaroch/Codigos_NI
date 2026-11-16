@@ -689,6 +689,9 @@ class AcquisitionGUI:
 if __name__ == "__main__":
     import time
 
+    # SETUP.txt, STOP.txt and src/main.py are resolved from the repository root: run from there
+    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     root = tk.Tk()
     root.withdraw()  # Hide the main window
 

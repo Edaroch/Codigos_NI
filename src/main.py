@@ -127,4 +127,6 @@ def main():
     file_stop_thread.join()  # Ensure the file check thread finishes
 
 if __name__ == "__main__":
+    # SETUP.txt, STOP.txt and the working files live in the repository root: run from there
+    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     main()

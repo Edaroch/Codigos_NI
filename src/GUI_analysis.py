@@ -591,6 +591,9 @@ class AnalysisGUI:
 #     root.mainloop()
 
 if __name__ == "__main__":
+    # SETUP.txt and the working JSON files live in the repository root: run from there
+    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     root = tk.Tk()
     root.withdraw()  # Hide the main window
 

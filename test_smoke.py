@@ -10,6 +10,7 @@ import tempfile
 import warnings
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # SETUP.txt is read from the repository root
 
 import capture_data, data_acquisition, data_handling, process_data  # noqa: F401
 from load_setup_data import NI9230_RATES, load_config, parse_restart_time
